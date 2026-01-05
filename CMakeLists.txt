@@ -8,6 +8,9 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_executable(snake
     src/main.cpp
+    src/core/App.cpp
+    src/core/Input.cpp
+    src/core/Time.cpp
     src/io/AppData.cpp
     src/io/Bootstrap.cpp
     src/io/Paths.cpp
@@ -43,7 +46,7 @@ if(NOT LUA_TARGET)
 endif()
 
 target_include_directories(snake PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_compile_definitions(snake PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+target_compile_definitions(snake PRIVATE SDL_MAIN_HANDLED NOMINMAX WIN32_LEAN_AND_MEAN)
 target_link_libraries(snake
     PRIVATE
         shell32
