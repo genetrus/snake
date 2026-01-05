@@ -11,6 +11,7 @@
 
 #include "io/Paths.h"
 #include "render/Animation.h"
+#include "lua/Bindings.h"
 
 namespace snake::core {
 
@@ -20,6 +21,8 @@ App::App() {
         sdl_initialized_ = true;
         CreateWindowAndRenderer();
         ui_.SetFont(&ui_font_);
+        lua_ctx_.game = &game_;
+        lua_ctx_.audio = &audio_;
 
         audio_.Init();
         sfx_.SetAudioSystem(&audio_);
@@ -45,6 +48,19 @@ App::App() {
 
         time_.Init();
         game_.ResetAll();
+
+        lua_.Init();
+        snake::lua::Bindings::Register(lua_.L());
+
+        const auto rules_path = snake::io::AssetsPath("scripts/rules.lua");
+        const auto config_path = snake::io::UserPath("config.lua");
+        if (!lua_.LoadRules(rules_path)) {
+            SDL_Log("Lua load rules failed");
+        }
+        if (!lua_.LoadConfig(config_path)) {
+            SDL_Log("Lua load config failed");
+        }
+        lua_.CallWithCtx("on_app_init", &lua_ctx_);
     } catch (...) {
         ShutdownSDL();
         throw;
@@ -73,6 +89,19 @@ int App::Run() {
 
             game_.HandleInput(input_);
 
+            if (input_.KeyPressed(SDLK_F5)) {
+                const auto rules_path = snake::io::AssetsPath("scripts/rules.lua");
+                const auto config_path = snake::io::UserPath("config.lua");
+                if (lua_.HotReload(rules_path, config_path)) {
+                    snake::lua::Bindings::Register(lua_.L());
+                    lua_.CallWithCtx("on_app_init", &lua_ctx_);
+                    lua_error_.clear();
+                } else if (lua_.LastError()) {
+                    lua_error_ = lua_.LastError()->message;
+                    SDL_Log("Lua reload failed: %s", lua_error_.c_str());
+                }
+            }
+
             if (game_.State() == snake::game::State::Menu && input_.KeyPressed(SDLK_ESCAPE)) {
                 input_.RequestQuit();
             }
@@ -100,6 +129,7 @@ int App::Run() {
             if (current_state != prev_state) {
                 if (prev_state == snake::game::State::Menu && current_state == snake::game::State::Playing) {
                     sfx_.Play(audio::SfxId::MenuClick);
+                    lua_.CallWithCtx("on_round_start", &lua_ctx_);
                 }
                 if ((prev_state == snake::game::State::Playing || prev_state == snake::game::State::Paused) &&
                     current_state == snake::game::State::GameOver) {
@@ -110,6 +140,9 @@ int App::Run() {
                 }
                 if (prev_state == snake::game::State::Paused && current_state == snake::game::State::Playing) {
                     sfx_.Play(audio::SfxId::PauseOff);
+                }
+                if (prev_state == snake::game::State::GameOver && current_state == snake::game::State::Playing) {
+                    lua_.CallWithCtx("on_round_reset", &lua_ctx_);
                 }
             }
 

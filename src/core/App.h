@@ -2,6 +2,8 @@
 
 #include <SDL.h>
 
+#include <string>
+
 #include "audio/AudioSystem.h"
 #include "audio/SFX.h"
 #include "core/Input.h"
@@ -10,8 +12,16 @@
 #include "render/Font.h"
 #include "render/SpriteAtlas.h"
 #include "render/UIRenderer.h"
+#include "lua/LuaRuntime.h"
+#include "lua/Bindings.h"
 
 namespace snake::core {
+
+struct AppLuaContext {
+    snake::game::Game* game = nullptr;
+    snake::audio::AudioSystem* audio = nullptr;
+};
+
 class App {
 public:
     App();
@@ -36,6 +46,9 @@ private:
     game::Game game_;
     audio::AudioSystem audio_;
     audio::SFX sfx_;
+    AppLuaContext lua_ctx_;
+    snake::lua::LuaRuntime lua_;
+    std::string lua_error_;
     render::Font ui_font_;
     render::SpriteAtlas atlas_;
     render::UIRenderer ui_;
