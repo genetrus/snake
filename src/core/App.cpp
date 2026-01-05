@@ -2,7 +2,6 @@
 
 #include <SDL.h>
 #include <SDL_image.h>
-#include <SDL_mixer.h>
 #include <SDL_ttf.h>
 
 #include <algorithm>
@@ -21,6 +20,10 @@ App::App() {
         sdl_initialized_ = true;
         CreateWindowAndRenderer();
         ui_.SetFont(&ui_font_);
+
+        audio_.Init();
+        sfx_.SetAudioSystem(&audio_);
+        sfx_.LoadAll("./assets/sounds");
 
         const auto font_path = snake::io::AssetsPath("fonts/placeholder.ttf");
         if (std::filesystem::exists(font_path)) {
@@ -56,6 +59,9 @@ App::~App() {
 
 int App::Run() {
     try {
+        auto prev_state = game_.State();
+        int prev_score = game_.GetScore().Score();
+
         bool running = true;
         while (running) {
             input_.BeginFrame();
@@ -84,6 +90,32 @@ int App::Run() {
                 break;
             }
 
+            const auto current_state = game_.State();
+            const int current_score = game_.GetScore().Score();
+
+            if (current_score > prev_score) {
+                sfx_.Play(audio::SfxId::Eat);
+            }
+
+            if (current_state != prev_state) {
+                if (prev_state == snake::game::State::Menu && current_state == snake::game::State::Playing) {
+                    sfx_.Play(audio::SfxId::MenuClick);
+                }
+                if ((prev_state == snake::game::State::Playing || prev_state == snake::game::State::Paused) &&
+                    current_state == snake::game::State::GameOver) {
+                    sfx_.Play(audio::SfxId::GameOver);
+                }
+                if (prev_state == snake::game::State::Playing && current_state == snake::game::State::Paused) {
+                    sfx_.Play(audio::SfxId::PauseOn);
+                }
+                if (prev_state == snake::game::State::Paused && current_state == snake::game::State::Playing) {
+                    sfx_.Play(audio::SfxId::PauseOff);
+                }
+            }
+
+            prev_state = current_state;
+            prev_score = current_score;
+
             RenderFrame();
             SDL_RenderPresent(renderer_);
 
@@ -101,7 +133,10 @@ int App::Run() {
 void App::InitSDL() {
     SDL_SetMainReady();
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) != 0) {
-        throw std::runtime_error(SDL_GetError());
+        SDL_Log("SDL_Init (video|audio) failed: %s", SDL_GetError());
+        if (SDL_Init(SDL_INIT_VIDEO) != 0) {
+            throw std::runtime_error(SDL_GetError());
+        }
     }
 
     const int img_flags = IMG_INIT_PNG | IMG_INIT_JPG;
@@ -111,10 +146,6 @@ void App::InitSDL() {
 
     if (TTF_Init() != 0) {
         SDL_Log("TTF_Init failed: %s", TTF_GetError());
-    }
-
-    if (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 2048) != 0) {
-        SDL_Log("Mix_OpenAudio failed: %s", Mix_GetError());
     }
 }
 
@@ -140,6 +171,8 @@ void App::CreateWindowAndRenderer() {
 }
 
 void App::ShutdownSDL() {
+    sfx_.Reset();
+    audio_.Shutdown();
     atlas_.SetTexture(nullptr);
     ui_font_.Reset();
 
@@ -154,8 +187,6 @@ void App::ShutdownSDL() {
     }
 
     if (sdl_initialized_) {
-        Mix_CloseAudio();
-        Mix_Quit();
         TTF_Quit();
         IMG_Quit();
         SDL_Quit();
