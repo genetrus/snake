@@ -54,4 +54,5 @@ target_link_libraries(snake
 
 if(EXISTS "${CMAKE_SOURCE_DIR}/cmake/CopyRuntimeDeps.cmake")
     include(${CMAKE_SOURCE_DIR}/cmake/CopyRuntimeDeps.cmake)
+    snake_copy_runtime_deps(snake)
 endif()
