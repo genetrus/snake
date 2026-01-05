@@ -10,6 +10,7 @@ class Input {
 public:
     void BeginFrame();
     void ProcessEvent(const SDL_Event& e);
+    void RequestQuit();
     bool QuitRequested() const;
 
     bool KeyDown(SDL_Keycode key) const;
