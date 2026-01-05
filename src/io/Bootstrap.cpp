@@ -6,28 +6,25 @@
 #include <stdexcept>
 
 #include "io/AppData.h"
+#include "io/Paths.h"
 #include "nlohmann/json.hpp"
 
 namespace fs = std::filesystem;
 
 namespace snake::io {
 
-namespace {
-constexpr auto kDefaultConfigPath = "assets/scripts/config.lua";
-}  // namespace
-
 void BootstrapUserData() {
     EnsureAppDataDirExists();
 
-    const fs::path appdata_dir = GetAppDataDir();
-    const fs::path user_config = appdata_dir / "config.lua";
-    const fs::path highscores = appdata_dir / "highscores.json";
-    const fs::path default_config = fs::path(kDefaultConfigPath);
+    const fs::path appdata_dir = UserDir();
+    const fs::path user_config = UserPath("config.lua");
+    const fs::path highscores = UserPath("highscores.json");
+    const fs::path default_config = AssetsPath("scripts/config.lua");
 
     if (!fs::exists(user_config)) {
         if (!fs::exists(default_config)) {
-            throw std::runtime_error(
-                "Default config missing at runtime: assets/scripts/config.lua");
+            throw std::runtime_error("Default config missing at runtime: " +
+                                     default_config.string());
         }
 
         std::error_code ec;

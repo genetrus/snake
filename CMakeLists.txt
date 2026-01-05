@@ -10,6 +10,7 @@ add_executable(snake
     src/main.cpp
     src/io/AppData.cpp
     src/io/Bootstrap.cpp
+    src/io/Paths.cpp
 )
 
 find_package(SDL2 CONFIG REQUIRED)
