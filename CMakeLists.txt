@@ -23,6 +23,8 @@ add_executable(snake
     src/io/AppData.cpp
     src/io/Bootstrap.cpp
     src/io/Paths.cpp
+    src/lua/LuaRuntime.cpp
+    src/lua/Bindings.cpp
     src/render/Animation.cpp
     src/render/Font.cpp
     src/render/SpriteAtlas.cpp
