@@ -74,13 +74,13 @@ Notes:
 
 ### Option B — Visual Studio “Open Folder”
 
-1) Open VS2022
-2) **File → Open → Folder…** and select the repo root `snake/`
-3) VS will detect `CMakeLists.txt` and configure automatically (CMake Settings)
+1) In **Visual Studio 2022** choose **File → Open → Folder…** and select the repo root `snake/`.
+2) VS will detect `CMakeLists.txt` and run CMake configure; ensure the generator/toolset is **MSVC** with architecture **x64** (adjust in CMake Settings if needed).
+3) Select the startup item/target `snake` and run it from Visual Studio.
 
-Make sure the configuration is **x64** and uses the vcpkg toolchain:
-- `external/vcpkg/scripts/buildsystems/vcpkg.cmake`
-- `VCPKG_TARGET_TRIPLET` = `x64-windows` (dynamic libs)
+While configuring, make sure the vcpkg settings match the repo defaults:
+- Toolchain file: `external/vcpkg/scripts/buildsystems/vcpkg.cmake`
+- Triplet: `VCPKG_TARGET_TRIPLET` = `x64-windows` (**dynamic** libs)
 
 ---
 
