@@ -21,6 +21,10 @@ add_executable(snake
     src/io/AppData.cpp
     src/io/Bootstrap.cpp
     src/io/Paths.cpp
+    src/render/Animation.cpp
+    src/render/Font.cpp
+    src/render/SpriteAtlas.cpp
+    src/render/UIRenderer.cpp
 )
 
 find_package(SDL2 CONFIG REQUIRED)
