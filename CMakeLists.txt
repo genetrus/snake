@@ -9,6 +9,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 add_executable(snake
     src/main.cpp
     src/io/AppData.cpp
+    src/io/Bootstrap.cpp
 )
 
 find_package(SDL2 CONFIG REQUIRED)

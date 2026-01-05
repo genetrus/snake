@@ -3,12 +3,13 @@
 #include <iostream>
 
 #include "io/AppData.h"
+#include "io/Bootstrap.h"
 
 int main() {
     try {
+        snake::io::BootstrapUserData();
         const auto app_data_dir = snake::io::GetAppDataDir();
-        snake::io::EnsureAppDataDirExists();
-        std::cout << "AppData directory: " << app_data_dir << std::endl;
+        std::cout << "AppData directory ready at: " << app_data_dir << std::endl;
         std::cout << "Snake game skeleton initialized." << std::endl;
         return 0;
     } catch (const std::exception& ex) {
