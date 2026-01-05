@@ -8,6 +8,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_executable(snake
     src/main.cpp
+    src/io/AppData.cpp
 )
 
 find_package(SDL2 CONFIG REQUIRED)
@@ -43,6 +44,8 @@ target_include_directories(snake PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_compile_definitions(snake PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
 target_link_libraries(snake
     PRIVATE
+        shell32
+        Ole32
         SDL2::SDL2
         SDL2::SDL2main
         SDL2_image::SDL2_image
