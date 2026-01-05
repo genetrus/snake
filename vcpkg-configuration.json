@@ -1,0 +1,6 @@
+{
+  "default-registry": {
+    "kind": "builtin",
+    "baseline": "PUT_VCPKG_SUBMODULE_COMMIT_HERE"
+  }
+}

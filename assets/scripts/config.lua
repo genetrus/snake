@@ -1,0 +1,25 @@
+return {
+    window_w = 800,
+    window_h = 800,
+    fullscreen = false,
+    vsync = false,
+    board_w = 20,
+    board_h = 20,
+    tile_size = 32,
+    wrap_mode = false,
+    ui_panel_mode = "auto",
+    audio = {
+        master = 1.0,
+        sfx = 0.8,
+        music = 0.6,
+    },
+    food_score = 10,
+    keybinds = {
+        up = { primary = "W", secondary = "Up" },
+        down = { primary = "S", secondary = "Down" },
+        left = { primary = "A", secondary = "Left" },
+        right = { primary = "D", secondary = "Right" },
+        pause = { primary = "P", secondary = "Escape" },
+        restart = { primary = "R", secondary = "Enter" },
+    },
+}
