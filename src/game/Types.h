@@ -1,10 +1,12 @@
 #pragma once
 
+#include <compare>
+
 namespace snake::game {
 struct Pos {
     int x;
     int y;
-};
 
-inline bool operator==(const Pos&, const Pos&) = default;
+    auto operator<=>(const Pos&) const = default;
+};
 }  // namespace snake::game
