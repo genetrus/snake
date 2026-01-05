@@ -2,6 +2,8 @@
 
 #include <SDL.h>
 
+#include "audio/AudioSystem.h"
+#include "audio/SFX.h"
 #include "core/Input.h"
 #include "core/Time.h"
 #include "game/Game.h"
@@ -32,6 +34,8 @@ private:
     Time time_;
     Input input_;
     game::Game game_;
+    audio::AudioSystem audio_;
+    audio::SFX sfx_;
     render::Font ui_font_;
     render::SpriteAtlas atlas_;
     render::UIRenderer ui_;

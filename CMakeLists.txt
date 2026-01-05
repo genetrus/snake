@@ -11,6 +11,8 @@ add_executable(snake
     src/core/App.cpp
     src/core/Input.cpp
     src/core/Time.cpp
+    src/audio/AudioSystem.cpp
+    src/audio/SFX.cpp
     src/game/Board.cpp
     src/game/Effects.cpp
     src/game/Game.cpp
