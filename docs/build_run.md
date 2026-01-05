@@ -63,10 +63,14 @@ From repository root:
 ```powershell
 cmake -S . -B build/vs2022 `
   -G "Visual Studio 17 2022" -A x64 `
-  -DCMAKE_TOOLCHAIN_FILE=external/vcpkg/scripts/buildsystems/vcpkg.cmake
+  -DCMAKE_TOOLCHAIN_FILE=external/vcpkg/scripts/buildsystems/vcpkg.cmake `
+  -DVCPKG_TARGET_TRIPLET=x64-windows
 ```
 
 During configure, vcpkg will install the dependencies from `vcpkg.json` using the pinned baseline in `vcpkg-configuration.json`.
+
+Notes:
+- `x64-windows` = **dynamic (DLL) linkage**. For static, use `x64-windows-static`.
 
 ### Option B — Visual Studio “Open Folder”
 
@@ -76,6 +80,7 @@ During configure, vcpkg will install the dependencies from `vcpkg.json` using th
 
 Make sure the configuration is **x64** and uses the vcpkg toolchain:
 - `external/vcpkg/scripts/buildsystems/vcpkg.cmake`
+- `VCPKG_TARGET_TRIPLET` = `x64-windows` (dynamic libs)
 
 ---
 
