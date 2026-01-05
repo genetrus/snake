@@ -11,6 +11,13 @@ add_executable(snake
     src/core/App.cpp
     src/core/Input.cpp
     src/core/Time.cpp
+    src/game/Board.cpp
+    src/game/Effects.cpp
+    src/game/Game.cpp
+    src/game/ScoreSystem.cpp
+    src/game/Snake.cpp
+    src/game/Spawner.cpp
+    src/game/StateMachine.cpp
     src/io/AppData.cpp
     src/io/Bootstrap.cpp
     src/io/Paths.cpp

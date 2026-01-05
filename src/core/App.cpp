@@ -12,6 +12,7 @@ App::App() {
         sdl_initialized_ = true;
         CreateWindowAndRenderer();
         time_.Init();
+        game_.ResetAll();
     } catch (...) {
         ShutdownSDL();
         throw;
@@ -35,8 +36,10 @@ int App::Run() {
                 input_.ProcessEvent(event);
             }
 
-            if (input_.QuitRequested()) {
-                break;
+            game_.HandleInput(input_);
+
+            if (game_.State() == snake::game::State::Menu && input_.KeyPressed(SDLK_ESCAPE)) {
+                input_.RequestQuit();
             }
 
             time_.UpdateFrame();
@@ -112,7 +115,7 @@ void App::ShutdownSDL() {
 }
 
 void App::UpdateTick() {
-    // Placeholder for future fixed tick updates (e.g., game logic, scripting).
+    game_.Tick(time_.TickDt());
 }
 
 void App::RenderFrame() {

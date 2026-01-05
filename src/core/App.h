@@ -4,6 +4,7 @@
 
 #include "core/Input.h"
 #include "core/Time.h"
+#include "game/Game.h"
 
 namespace snake::core {
 class App {
@@ -24,6 +25,7 @@ private:
     SDL_Renderer* renderer_ = nullptr;
     Time time_;
     Input input_;
+    game::Game game_;
     bool sdl_initialized_ = false;
 };
 }  // namespace snake::core

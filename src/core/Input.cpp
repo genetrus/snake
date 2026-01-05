@@ -14,10 +14,6 @@ void Input::ProcessEvent(const SDL_Event& e) {
             break;
         case SDL_KEYDOWN: {
             const SDL_Keycode key = e.key.keysym.sym;
-            if (key == SDLK_ESCAPE) {
-                quit_requested_ = true;
-            }
-
             if (e.key.repeat == 0) {
                 keys_down_.insert(key);
                 keys_pressed_.insert(key);
@@ -47,6 +43,10 @@ void Input::ProcessEvent(const SDL_Event& e) {
         default:
             break;
     }
+}
+
+void Input::RequestQuit() {
+    quit_requested_ = true;
 }
 
 bool Input::QuitRequested() const {
