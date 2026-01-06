@@ -31,16 +31,17 @@ App::~App() {
 int App::Run() {
     try {
         InitSDL();
-        const auto config_path = snake::io::UserPath("config.lua");
-        config_.LoadFromFile(config_path);
+        config_path_ = snake::io::UserPath("config.lua");
+        pending_config_.LoadFromFile(config_path_);
+        active_config_ = pending_config_;
         const auto highscores_path = snake::io::UserPath("highscores.json");
         highscores_.Load(highscores_path);
         menu_items_ = {"Start", "Options", "Highscores", "Exit"};
 
-        window_w_ = config_.Data().window.width;
-        window_h_ = config_.Data().window.height;
+        window_w_ = pending_config_.Data().window.width;
+        window_h_ = pending_config_.Data().window.height;
 
-        CreateWindowAndRenderer(config_.Data().window.vsync);
+        CreateWindowAndRenderer(pending_config_.Data().window.vsync);
         renderer_impl_.Init(renderer_);
         time_.Init();
         lua_ctx_.game = &game_;
@@ -49,7 +50,7 @@ int App::Run() {
         audio_.Init();
         ApplyConfig();
         ApplyAudioSettings();
-        ApplyNowVideoSettings();
+        ApplyImmediateSettings(pending_config_.Data());
         InitLua();
 
         bool running = true;
@@ -87,19 +88,6 @@ int App::Run() {
 
             if (input_.QuitRequested()) {
                 running = false;
-            }
-
-            if (config_.Data().window.vsync != vsync_enabled_) {
-                const bool recreated = RecreateRenderer(config_.Data().window.vsync);
-                if (!recreated) {
-                    config_.Data().window.vsync = vsync_enabled_;
-                    if (!config_.SaveToFile(config_path)) {
-                        SDL_Log("Failed to save reverted config after VSync error");
-                    }
-                } else if (!config_.SaveToFile(config_path)) {
-                    SDL_Log("Failed to persist VSync change to config file");
-                }
-                NotifySettingChanged("window.vsync");
             }
 
             HandleMenus(running);
@@ -213,8 +201,8 @@ void App::RenderFrame() {
     SDL_GetWindowSize(window_, &window_w, &window_h);
 
     snake::render::RenderSettings rs{};
-    rs.tile_px = config_.Data().grid.tile_size > 0 ? config_.Data().grid.tile_size : 32;
-    rs.panel_mode = config_.Data().ui.panel_mode;
+    rs.tile_px = active_config_.Data().grid.tile_size > 0 ? active_config_.Data().grid.tile_size : 32;
+    rs.panel_mode = active_config_.Data().ui.panel_mode;
 
     std::string overlay_error_text = renderer_error_text_;
     if (const auto& err = lua_.LastError()) {
@@ -236,7 +224,7 @@ void App::RenderFrame() {
     ui.lua_error = lua_reload_error_;
     ui.game_over_reason = game_.GameOverReason();
     ui.final_score = game_.GetScore().Score();
-    ui.config = &config_.Data();
+    ui.config = &pending_config_.Data();
     ui.highscores = &highscores_.Entries();
     ui.menu_items = menu_items_;
 
@@ -253,26 +241,26 @@ void App::RenderFrame() {
     };
 
     ui.option_items = {
-        {"Board Width:", std::to_string(config_.Data().grid.board_w)},
-        {"Board Height:", std::to_string(config_.Data().grid.board_h)},
-        {"Tile Size:", std::to_string(config_.Data().grid.tile_size)},
-        {"Wrap Mode:", wrap_label(config_.Data().grid.wrap_mode)},
-        {"Window Width:", std::to_string(config_.Data().window.width)},
-        {"Window Height:", std::to_string(config_.Data().window.height)},
-        {"Fullscreen Desktop:", bool_label(config_.Data().window.fullscreen_desktop)},
-        {"VSync:", bool_label(config_.Data().window.vsync)},
-        {"Audio Enabled:", bool_label(config_.Data().audio.enabled)},
-        {"Master Volume:", std::to_string(config_.Data().audio.master_volume)},
-        {"SFX Volume:", std::to_string(config_.Data().audio.sfx_volume)},
-        {"UI Panel Mode:", config_.Data().ui.panel_mode},
-        {"Keybind Up:", keypair_to_text(config_.Data().keys.up)},
-        {"Keybind Down:", keypair_to_text(config_.Data().keys.down)},
-        {"Keybind Left:", keypair_to_text(config_.Data().keys.left)},
-        {"Keybind Right:", keypair_to_text(config_.Data().keys.right)},
-        {"Keybind Pause:", keypair_to_text(config_.Data().keys.pause)},
-        {"Keybind Restart:", keypair_to_text(config_.Data().keys.restart)},
-        {"Keybind Menu:", keypair_to_text(config_.Data().keys.menu)},
-        {"Keybind Confirm:", keypair_to_text(config_.Data().keys.confirm)},
+        {"Board Width:", std::to_string(pending_config_.Data().grid.board_w)},
+        {"Board Height:", std::to_string(pending_config_.Data().grid.board_h)},
+        {"Tile Size:", std::to_string(pending_config_.Data().grid.tile_size)},
+        {"Wrap Mode:", wrap_label(pending_config_.Data().grid.wrap_mode)},
+        {"Window Width:", std::to_string(pending_config_.Data().window.width)},
+        {"Window Height:", std::to_string(pending_config_.Data().window.height)},
+        {"Fullscreen Desktop:", bool_label(pending_config_.Data().window.fullscreen_desktop)},
+        {"VSync:", bool_label(pending_config_.Data().window.vsync)},
+        {"Audio Enabled:", bool_label(pending_config_.Data().audio.enabled)},
+        {"Master Volume:", std::to_string(pending_config_.Data().audio.master_volume)},
+        {"SFX Volume:", std::to_string(pending_config_.Data().audio.sfx_volume)},
+        {"UI Panel Mode:", pending_config_.Data().ui.panel_mode},
+        {"Keybind Up:", keypair_to_text(pending_config_.Data().keys.up)},
+        {"Keybind Down:", keypair_to_text(pending_config_.Data().keys.down)},
+        {"Keybind Left:", keypair_to_text(pending_config_.Data().keys.left)},
+        {"Keybind Right:", keypair_to_text(pending_config_.Data().keys.right)},
+        {"Keybind Pause:", keypair_to_text(pending_config_.Data().keys.pause)},
+        {"Keybind Restart:", keypair_to_text(pending_config_.Data().keys.restart)},
+        {"Keybind Menu:", keypair_to_text(pending_config_.Data().keys.menu)},
+        {"Keybind Confirm:", keypair_to_text(pending_config_.Data().keys.confirm)},
         {"Back", ""},
     };
 
@@ -328,7 +316,7 @@ bool App::RecreateRenderer(bool want_vsync) {
 }
 
 void App::ApplyConfig() {
-    const auto& data = config_.Data();
+    const auto& data = active_config_.Data();
     game_.SetBoardSize(data.grid.board_w, data.grid.board_h);
     game_.SetWrapMode(data.grid.wrap_mode);
     game_.SetFoodScore(data.gameplay.food_score);
@@ -348,7 +336,7 @@ void App::InitLua() {
     snake::lua::Bindings::Register(lua_.L());
 
     const auto rules_path = snake::io::AssetsPath("scripts/rules.lua");
-    const auto config_path = snake::io::UserPath("config.lua");
+    const auto config_path = config_path_.empty() ? snake::io::UserPath("config.lua") : config_path_;
     if (!lua_.LoadRules(rules_path)) {
         SDL_Log("Failed to load Lua rules");
     }
@@ -362,14 +350,13 @@ void App::PushUiMessage(std::string msg) {
 }
 
 void App::HandleMenus(bool& running) {
-    const auto config_path = snake::io::UserPath("config.lua");
     const auto highscores_path = snake::io::UserPath("highscores.json");
 
     auto start_round = [&]() {
+        ApplyRoundSettingsOnRestart();
         ApplyConfig();
         game_.ResetAll();
         sm_.StartGame();
-        pending_round_restart_ = false;
         lua_.CallWithCtxIfExists("on_round_start", &lua_ctx_);
     };
 
@@ -385,10 +372,10 @@ void App::HandleMenus(bool& running) {
     auto action_pressed = [&](const snake::io::KeyPair& keys) {
         return input_.KeyPressed(keys.primary) || input_.KeyPressed(keys.secondary);
     };
-    const bool confirm_pressed = action_pressed(config_.Data().keys.confirm);
-    const bool menu_pressed = action_pressed(config_.Data().keys.menu);
-    const bool restart_pressed = action_pressed(config_.Data().keys.restart);
-    const bool pause_pressed = action_pressed(config_.Data().keys.pause);
+    const bool confirm_pressed = action_pressed(active_config_.Data().keys.confirm);
+    const bool menu_pressed = action_pressed(active_config_.Data().keys.menu);
+    const bool restart_pressed = action_pressed(active_config_.Data().keys.restart);
+    const bool pause_pressed = action_pressed(active_config_.Data().keys.pause);
 
     switch (sm_.Current()) {
         case snake::game::Screen::MainMenu: {
@@ -515,7 +502,7 @@ void App::HandleMenus(bool& running) {
 
         if (game_.IsGameOver()) {
             sm_.GameOver();
-            highscores_.TryAdd(config_.Data().player_name, game_.GetScore().Score(), snake::io::Highscores::NowIsoUtc());
+            highscores_.TryAdd(active_config_.Data().player_name, game_.GetScore().Score(), snake::io::Highscores::NowIsoUtc());
             highscores_.Save(highscores_path);
             lua_.CallWithCtxIfExists("on_game_over", &lua_ctx_, game_.GameOverReason());
         }
@@ -525,26 +512,31 @@ void App::HandleMenus(bool& running) {
 }
 
 void App::HandleOptionsInput() {
-    const auto config_path = snake::io::UserPath("config.lua");
-    auto& data = config_.Data();
+    auto& data = pending_config_.Data();
 
     auto persist = [&]() {
-        config_.Sanitize();
-        if (!config_.SaveToFile(config_path)) {
-            SDL_Log("Failed to save config to %s", config_path.string().c_str());
+        pending_config_.Sanitize();
+        if (!pending_config_.SaveToFile(config_path_)) {
+            SDL_Log("Failed to save config to %s", config_path_.string().c_str());
         }
     };
 
-    auto notify_and_apply = [&](const std::string& key, const std::function<void()>& apply_fn) {
+    auto notify_and_apply = [&](const std::string& key, const std::function<void()>& apply_fn, bool sync_before_apply) {
         persist();
+        if (sync_before_apply) {
+            SyncActiveWithPendingPreserveRound();
+        }
         if (apply_fn) {
             apply_fn();
+        }
+        if (!sync_before_apply) {
+            SyncActiveWithPendingPreserveRound();
         }
         NotifySettingChanged(key);
     };
 
     auto apply_next_round = [&]() {
-        pending_round_restart_ = true;
+        RefreshPendingRoundRestartFlag();
         PushUiMessage("Applies on restart");
     };
 
@@ -555,8 +547,8 @@ void App::HandleOptionsInput() {
     auto action_pressed = [&](const snake::io::KeyPair& keys) {
         return input_.KeyPressed(keys.primary) || input_.KeyPressed(keys.secondary);
     };
-    const bool confirm_pressed = action_pressed(config_.Data().keys.confirm);
-    const bool menu_pressed = action_pressed(config_.Data().keys.menu);
+    const bool confirm_pressed = action_pressed(active_config_.Data().keys.confirm);
+    const bool menu_pressed = action_pressed(active_config_.Data().keys.menu);
 
     if (menu_pressed) {
         sm_.BackToMenu();
@@ -570,12 +562,12 @@ void App::HandleOptionsInput() {
         options_index_ = (options_index_ + 1) % options_count;
     }
 
-    auto adjust_int = [&](int& value, int delta, int min_v, int max_v, const std::string& key, bool apply_now, const std::function<void()>& apply_fn = {}) {
+    auto adjust_int = [&](int& value, int delta, int min_v, int max_v, const std::string& key, bool apply_now, const std::function<void()>& apply_fn = {}, bool sync_before_apply = false) {
         const int before = value;
         value = std::clamp(value + delta, min_v, max_v);
         if (value != before) {
             if (apply_now) {
-                notify_and_apply(key, apply_fn);
+                notify_and_apply(key, apply_fn, sync_before_apply);
             } else {
                 persist();
                 apply_next_round();
@@ -594,8 +586,8 @@ void App::HandleOptionsInput() {
             if (right_pressed) adjust_int(data.grid.board_h, 1, 5, 60, "grid.board_h", false);
             break;
         case 2:  // tile_size
-            if (left_pressed) adjust_int(data.grid.tile_size, -2, 8, 128, "grid.tile_size", true);
-            if (right_pressed) adjust_int(data.grid.tile_size, 2, 8, 128, "grid.tile_size", true);
+            if (left_pressed) adjust_int(data.grid.tile_size, -2, 8, 128, "grid.tile_size", true, [&]() { ApplyImmediateSettings(pending_config_.Data()); });
+            if (right_pressed) adjust_int(data.grid.tile_size, 2, 8, 128, "grid.tile_size", true, [&]() { ApplyImmediateSettings(pending_config_.Data()); });
             break;
         case 3:  // wrap_mode
             if (confirm_pressed) {
@@ -606,46 +598,38 @@ void App::HandleOptionsInput() {
             }
             break;
         case 4:  // window.width
-            if (left_pressed) adjust_int(data.window.width, -16, 320, 3840, "window.width", true, [&]() { ApplyNowVideoSettings(); });
-            if (right_pressed) adjust_int(data.window.width, 16, 320, 3840, "window.width", true, [&]() { ApplyNowVideoSettings(); });
+            if (left_pressed) adjust_int(data.window.width, -16, 320, 3840, "window.width", true, [&]() { ApplyImmediateSettings(pending_config_.Data()); });
+            if (right_pressed) adjust_int(data.window.width, 16, 320, 3840, "window.width", true, [&]() { ApplyImmediateSettings(pending_config_.Data()); });
             break;
         case 5:  // window.height
-            if (left_pressed) adjust_int(data.window.height, -16, 320, 3840, "window.height", true, [&]() { ApplyNowVideoSettings(); });
-            if (right_pressed) adjust_int(data.window.height, 16, 320, 3840, "window.height", true, [&]() { ApplyNowVideoSettings(); });
+            if (left_pressed) adjust_int(data.window.height, -16, 320, 3840, "window.height", true, [&]() { ApplyImmediateSettings(pending_config_.Data()); });
+            if (right_pressed) adjust_int(data.window.height, 16, 320, 3840, "window.height", true, [&]() { ApplyImmediateSettings(pending_config_.Data()); });
             break;
         case 6:  // fullscreen
             if (confirm_pressed) {
                 data.window.fullscreen_desktop = !data.window.fullscreen_desktop;
-                notify_and_apply("window.fullscreen_desktop", [&]() { ApplyNowVideoSettings(); });
+                notify_and_apply("window.fullscreen_desktop", [&]() { ApplyImmediateSettings(pending_config_.Data()); }, false);
             }
             break;
         case 7:  // vsync
             if (confirm_pressed) {
-                const bool prev = data.window.vsync;
                 data.window.vsync = !data.window.vsync;
-                persist();
-                if (!RecreateRenderer(data.window.vsync)) {
-                    data.window.vsync = prev;
-                    persist();
-                } else {
-                    vsync_enabled_ = data.window.vsync;
-                }
-                NotifySettingChanged("window.vsync");
+                notify_and_apply("window.vsync", [&]() { ApplyImmediateSettings(pending_config_.Data()); }, false);
             }
             break;
         case 8:  // audio enabled
             if (confirm_pressed) {
                 data.audio.enabled = !data.audio.enabled;
-                notify_and_apply("audio.enabled", [&]() { ApplyAudioSettings(); });
+                notify_and_apply("audio.enabled", [&]() { ApplyAudioSettings(); }, true);
             }
             break;
         case 9:  // master volume
-            if (left_pressed) adjust_int(data.audio.master_volume, -8, 0, 128, "audio.master_volume", true, [&]() { ApplyAudioSettings(); });
-            if (right_pressed) adjust_int(data.audio.master_volume, 8, 0, 128, "audio.master_volume", true, [&]() { ApplyAudioSettings(); });
+            if (left_pressed) adjust_int(data.audio.master_volume, -8, 0, 128, "audio.master_volume", true, [&]() { ApplyAudioSettings(); }, true);
+            if (right_pressed) adjust_int(data.audio.master_volume, 8, 0, 128, "audio.master_volume", true, [&]() { ApplyAudioSettings(); }, true);
             break;
         case 10:  // sfx volume
-            if (left_pressed) adjust_int(data.audio.sfx_volume, -8, 0, 128, "audio.sfx_volume", true, [&]() { ApplyAudioSettings(); });
-            if (right_pressed) adjust_int(data.audio.sfx_volume, 8, 0, 128, "audio.sfx_volume", true, [&]() { ApplyAudioSettings(); });
+            if (left_pressed) adjust_int(data.audio.sfx_volume, -8, 0, 128, "audio.sfx_volume", true, [&]() { ApplyAudioSettings(); }, true);
+            if (right_pressed) adjust_int(data.audio.sfx_volume, 8, 0, 128, "audio.sfx_volume", true, [&]() { ApplyAudioSettings(); }, true);
             break;
         case 11:  // ui.panel_mode
             if (confirm_pressed || left_pressed || right_pressed) {
@@ -656,7 +640,7 @@ void App::HandleOptionsInput() {
                 } else {
                     data.ui.panel_mode = (data.ui.panel_mode == "auto") ? "top" : (data.ui.panel_mode == "top" ? "right" : "auto");
                 }
-                notify_and_apply("ui.panel_mode", {});
+                notify_and_apply("ui.panel_mode", {}, true);
             }
             break;
         case 12: if (confirm_pressed || left_pressed || right_pressed) BeginRebind("up", left_pressed ? 0 : (right_pressed ? 1 : 0)); break;
@@ -684,7 +668,6 @@ void App::BeginRebind(const std::string& action, int slot) {
 }
 
 void App::HandleRebind() {
-    const auto config_path = snake::io::UserPath("config.lua");
     if (input_.KeyPressed(SDLK_RETURN)) {
         rebind_slot_ = 1 - rebind_slot_;
     }
@@ -697,11 +680,12 @@ void App::HandleRebind() {
                                            SDLK_RETURN, SDLK_ESCAPE, SDLK_p, SDLK_r};
     for (auto key : allowed) {
         if (input_.KeyPressed(key)) {
-            if (config_.SetBind(rebind_action_, key, rebind_slot_)) {
-                config_.Sanitize();
-                if (!config_.SaveToFile(config_path)) {
+            if (pending_config_.SetBind(rebind_action_, key, rebind_slot_)) {
+                pending_config_.Sanitize();
+                if (!pending_config_.SaveToFile(config_path_)) {
                     SDL_Log("Failed to save config after rebinding");
                 }
+                SyncActiveWithPendingPreserveRound();
                 ApplyControlSettings();
                 NotifySettingChanged("keybinds." + rebind_action_);
             }
@@ -713,24 +697,44 @@ void App::HandleRebind() {
     }
 }
 
-void App::ApplyNowVideoSettings() {
-    SDL_SetWindowSize(window_, config_.Data().window.width, config_.Data().window.height);
-    if (config_.Data().window.fullscreen_desktop) {
+void App::ApplyImmediateSettings(const snake::io::ConfigData& cfg) {
+    SDL_SetWindowSize(window_, cfg.window.width, cfg.window.height);
+    if (cfg.window.fullscreen_desktop) {
         SDL_SetWindowFullscreen(window_, SDL_WINDOW_FULLSCREEN_DESKTOP);
     } else {
         SDL_SetWindowFullscreen(window_, 0);
     }
     SDL_GetWindowSize(window_, &window_w_, &window_h_);
+
+    const bool prev_vsync = active_config_.Data().window.vsync;
+    if (cfg.window.vsync != prev_vsync) {
+        if (!RecreateRenderer(cfg.window.vsync)) {
+            pending_config_.Data().window.vsync = prev_vsync;
+            pending_config_.Sanitize();
+            if (!pending_config_.SaveToFile(config_path_)) {
+                SDL_Log("Failed to save config after reverting VSync");
+            }
+        }
+    }
+
+    SyncActiveWithPendingPreserveRound();
+}
+
+void App::ApplyRoundSettingsOnRestart() {
+    active_config_.Data().grid.board_w = pending_config_.Data().grid.board_w;
+    active_config_.Data().grid.board_h = pending_config_.Data().grid.board_h;
+    active_config_.Data().grid.wrap_mode = pending_config_.Data().grid.wrap_mode;
+    RefreshPendingRoundRestartFlag();
 }
 
 void App::ApplyAudioSettings() {
-    audio_.SetEnabled(config_.Data().audio.enabled);
-    audio_.SetMasterVolume(config_.Data().audio.master_volume);
-    audio_.SetSfxVolume(config_.Data().audio.sfx_volume);
+    audio_.SetEnabled(active_config_.Data().audio.enabled);
+    audio_.SetMasterVolume(active_config_.Data().audio.master_volume);
+    audio_.SetSfxVolume(active_config_.Data().audio.sfx_volume);
 }
 
 void App::ApplyControlSettings() {
-    const auto& keys = config_.Data().keys;
+    const auto& keys = active_config_.Data().keys;
     snake::game::Game::Controls controls{};
     controls.up.primary = keys.up.primary;
     controls.up.secondary = keys.up.secondary;
@@ -767,7 +771,7 @@ void App::NotifySettingChanged(const std::string& key) {
     lua_pushlightuserdata(L, &lua_ctx_);
     lua_pushlstring(L, key.data(), key.size());
 
-    const auto& d = config_.Data();
+    const auto& d = pending_config_.Data();
     auto push_keypair = [&](const snake::io::KeyPair& kp) {
         const std::string a = snake::io::Config::KeycodeToToken(kp.primary);
         const std::string b = snake::io::Config::KeycodeToToken(kp.secondary);
@@ -822,6 +826,31 @@ void App::NotifySettingChanged(const std::string& key) {
         SDL_Log("on_setting_changed failed: %s", err ? err : "unknown error");
         lua_pop(L, 1);
     }
+}
+
+void App::SyncActiveWithPendingPreserveRound() {
+    const bool keep_round_settings = HasPendingRoundChanges();
+    const int board_w = active_config_.Data().grid.board_w;
+    const int board_h = active_config_.Data().grid.board_h;
+    const bool wrap_mode = active_config_.Data().grid.wrap_mode;
+
+    active_config_.Data() = pending_config_.Data();
+    if (keep_round_settings) {
+        active_config_.Data().grid.board_w = board_w;
+        active_config_.Data().grid.board_h = board_h;
+        active_config_.Data().grid.wrap_mode = wrap_mode;
+    }
+    RefreshPendingRoundRestartFlag();
+}
+
+bool App::HasPendingRoundChanges() const {
+    const auto& a = active_config_.Data().grid;
+    const auto& p = pending_config_.Data().grid;
+    return a.board_w != p.board_w || a.board_h != p.board_h || a.wrap_mode != p.wrap_mode;
+}
+
+void App::RefreshPendingRoundRestartFlag() {
+    pending_round_restart_ = HasPendingRoundChanges();
 }
 
 }  // namespace snake::core

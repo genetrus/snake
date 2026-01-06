@@ -203,6 +203,11 @@ Lua задаёт/обрабатывает:
   - VSync — **опция**, применяется через реализацию (допускается пересоздание renderer)
     - переключение VSync реализовано через пересоздание `SDL_Renderer` с перезагрузкой текстур/шрифтов
 
+## Applying settings
+- Apply on restart: `grid.board_w`, `grid.board_h`, `grid.wrap_mode`.
+- Apply immediately: `grid.tile_size`, `window.width`, `window.height`, `window.fullscreen_desktop`, `window.vsync`.
+- Note: `window.vsync` is applied by recreating `SDL_Renderer`; on failure the value is reverted.
+
 ## 16. Highscores
 - Top: **10** записей
 - Место хранения: `%AppData%/snake/highscores.json`
