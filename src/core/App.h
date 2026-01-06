@@ -46,8 +46,9 @@ private:
     void HandleOptionsInput();
     void ApplyNowVideoSettings();
     void ApplyAudioSettings();
+    void ApplyControlSettings();
     void NotifySettingChanged(const std::string& key);
-    void BeginRebind(const std::string& action);
+    void BeginRebind(const std::string& action, int slot);
     void HandleRebind();
     void PushUiMessage(std::string msg);
 
@@ -74,6 +75,7 @@ private:
     bool pending_round_restart_ = false;
     bool rebinding_ = false;
     std::string rebind_action_;
+    int rebind_slot_ = 0;
     int menu_index_ = 0;
     int options_index_ = 0;
     std::vector<std::string> menu_items_;

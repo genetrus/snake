@@ -5,6 +5,7 @@
 #include <SDL_ttf.h>
 
 #include <algorithm>
+#include <functional>
 #include <stdexcept>
 #include <lua.hpp>
 
@@ -36,10 +37,10 @@ int App::Run() {
         highscores_.Load(highscores_path);
         menu_items_ = {"Start", "Options", "Highscores", "Exit"};
 
-        window_w_ = config_.Data().video.window_w;
-        window_h_ = config_.Data().video.window_h;
+        window_w_ = config_.Data().window.width;
+        window_h_ = config_.Data().window.height;
 
-        CreateWindowAndRenderer(config_.Data().video.vsync);
+        CreateWindowAndRenderer(config_.Data().window.vsync);
         renderer_impl_.Init(renderer_);
         time_.Init();
         lua_ctx_.game = &game_;
@@ -47,6 +48,8 @@ int App::Run() {
 
         audio_.Init();
         ApplyConfig();
+        ApplyAudioSettings();
+        ApplyNowVideoSettings();
         InitLua();
 
         bool running = true;
@@ -86,16 +89,17 @@ int App::Run() {
                 running = false;
             }
 
-            if (config_.Data().video.vsync != vsync_enabled_) {
-                const bool recreated = RecreateRenderer(config_.Data().video.vsync);
+            if (config_.Data().window.vsync != vsync_enabled_) {
+                const bool recreated = RecreateRenderer(config_.Data().window.vsync);
                 if (!recreated) {
-                    config_.Data().video.vsync = vsync_enabled_;
+                    config_.Data().window.vsync = vsync_enabled_;
                     if (!config_.SaveToFile(config_path)) {
                         SDL_Log("Failed to save reverted config after VSync error");
                     }
                 } else if (!config_.SaveToFile(config_path)) {
                     SDL_Log("Failed to persist VSync change to config file");
                 }
+                NotifySettingChanged("window.vsync");
             }
 
             HandleMenus(running);
@@ -209,7 +213,7 @@ void App::RenderFrame() {
     SDL_GetWindowSize(window_, &window_w, &window_h);
 
     snake::render::RenderSettings rs{};
-    rs.tile_px = config_.Data().video.tile_px > 0 ? config_.Data().video.tile_px : 32;
+    rs.tile_px = config_.Data().grid.tile_size > 0 ? config_.Data().grid.tile_size : 32;
     rs.panel_mode = config_.Data().ui.panel_mode;
 
     std::string overlay_error_text = renderer_error_text_;
@@ -225,6 +229,8 @@ void App::RenderFrame() {
     ui.menu_index = menu_index_;
     ui.options_index = options_index_;
     ui.rebinding = rebinding_;
+    ui.rebind_action = rebind_action_;
+    ui.rebind_slot = rebind_slot_;
     ui.pending_round_restart = pending_round_restart_;
     ui.ui_message = ui_message_;
     ui.lua_error = lua_reload_error_;
@@ -234,40 +240,41 @@ void App::RenderFrame() {
     ui.highscores = &highscores_.Entries();
     ui.menu_items = menu_items_;
 
-    ui.option_items = {
-        {"window.width", std::to_string(config_.Data().video.window_w)},
-        {"window.height", std::to_string(config_.Data().video.window_h)},
-        {"window.fullscreen_desktop", config_.Data().video.fullscreen_desktop ? "true" : "false"},
-        {"window.vsync", config_.Data().video.vsync ? "on" : "off"},
-        {"ui.panel_mode", config_.Data().ui.panel_mode},
-        {"grid.board_w", std::to_string(config_.Data().game.board_w)},
-        {"grid.board_h", std::to_string(config_.Data().game.board_h)},
-        {"grid.tile_size", std::to_string(config_.Data().video.tile_px)},
-        {"grid.wrap_mode", config_.Data().game.walls == snake::io::WallMode::Wrap ? "wrap" : "death"},
-        {"audio.enabled", config_.Data().audio.enabled ? "true" : "false"},
-        {"audio.master_volume", std::to_string(config_.Data().audio.master_volume)},
-        {"gameplay.food_score", std::to_string(config_.Data().game.food_score)},
-        {"keybinds.up", "key"},
-        {"keybinds.down", "key"},
-        {"keybinds.left", "key"},
-        {"keybinds.right", "key"},
-        {"keybinds.pause", "key"},
-        {"keybinds.restart", "key"},
-        {"keybinds.menu", "key"},
-        {"keybinds.confirm", "key"},
+    auto bool_label = [](bool on) { return on ? "On" : "Off"; };
+    auto wrap_label = [](bool wrap) { return wrap ? "On" : "Off"; };
+    auto keypair_to_text = [](const snake::io::KeyPair& kp) {
+        std::string a = snake::io::Config::KeycodeToToken(kp.primary);
+        std::string b = snake::io::Config::KeycodeToToken(kp.secondary);
+        if (a.empty()) a = SDL_GetKeyName(kp.primary);
+        if (b.empty()) b = SDL_GetKeyName(kp.secondary);
+        if (a.empty()) a = "-";
+        if (b.empty()) b = "-";
+        return a + " / " + b;
     };
 
-    auto key_to_str = [](SDL_Keycode k) {
-        return SDL_GetKeyName(k);
+    ui.option_items = {
+        {"Board Width:", std::to_string(config_.Data().grid.board_w)},
+        {"Board Height:", std::to_string(config_.Data().grid.board_h)},
+        {"Tile Size:", std::to_string(config_.Data().grid.tile_size)},
+        {"Wrap Mode:", wrap_label(config_.Data().grid.wrap_mode)},
+        {"Window Width:", std::to_string(config_.Data().window.width)},
+        {"Window Height:", std::to_string(config_.Data().window.height)},
+        {"Fullscreen Desktop:", bool_label(config_.Data().window.fullscreen_desktop)},
+        {"VSync:", bool_label(config_.Data().window.vsync)},
+        {"Audio Enabled:", bool_label(config_.Data().audio.enabled)},
+        {"Master Volume:", std::to_string(config_.Data().audio.master_volume)},
+        {"SFX Volume:", std::to_string(config_.Data().audio.sfx_volume)},
+        {"UI Panel Mode:", config_.Data().ui.panel_mode},
+        {"Keybind Up:", keypair_to_text(config_.Data().keys.up)},
+        {"Keybind Down:", keypair_to_text(config_.Data().keys.down)},
+        {"Keybind Left:", keypair_to_text(config_.Data().keys.left)},
+        {"Keybind Right:", keypair_to_text(config_.Data().keys.right)},
+        {"Keybind Pause:", keypair_to_text(config_.Data().keys.pause)},
+        {"Keybind Restart:", keypair_to_text(config_.Data().keys.restart)},
+        {"Keybind Menu:", keypair_to_text(config_.Data().keys.menu)},
+        {"Keybind Confirm:", keypair_to_text(config_.Data().keys.confirm)},
+        {"Back", ""},
     };
-    ui.option_items[12].second = key_to_str(config_.Data().keys.up);
-    ui.option_items[13].second = key_to_str(config_.Data().keys.down);
-    ui.option_items[14].second = key_to_str(config_.Data().keys.left);
-    ui.option_items[15].second = key_to_str(config_.Data().keys.right);
-    ui.option_items[16].second = key_to_str(config_.Data().keys.pause);
-    ui.option_items[17].second = key_to_str(config_.Data().keys.restart);
-    ui.option_items[18].second = key_to_str(config_.Data().keys.menu);
-    ui.option_items[19].second = key_to_str(config_.Data().keys.confirm);
 
     renderer_impl_.RenderFrame(renderer_, window_w, window_h, rs, game_, time_.Now(), overlay_error_text, ui);
 }
@@ -322,22 +329,14 @@ bool App::RecreateRenderer(bool want_vsync) {
 
 void App::ApplyConfig() {
     const auto& data = config_.Data();
-    game_.SetBoardSize(data.game.board_w, data.game.board_h);
-    game_.SetWrapMode(data.game.walls == snake::io::WallMode::Wrap);
-    game_.SetFoodScore(data.game.food_score);
-    game_.SetBonusScore(data.game.bonus_score);
-    game_.SetSlowParams(data.game.slow_multiplier, data.game.slow_duration_sec);
+    game_.SetBoardSize(data.grid.board_w, data.grid.board_h);
+    game_.SetWrapMode(data.grid.wrap_mode);
+    game_.SetFoodScore(data.gameplay.food_score);
+    const int bonus_score = data.gameplay.bonus_score_score > 0 ? data.gameplay.bonus_score_score : data.gameplay.bonus_score;
+    game_.SetBonusScore(bonus_score);
+    game_.SetSlowParams(data.gameplay.slow_multiplier, data.gameplay.slow_duration_sec);
 
-    snake::game::Game::Controls controls{};
-    controls.up = data.keys.up;
-    controls.down = data.keys.down;
-    controls.left = data.keys.left;
-    controls.right = data.keys.right;
-    controls.pause = data.keys.pause;
-    controls.restart = data.keys.restart;
-    controls.menu = data.keys.menu;
-    controls.confirm = data.keys.confirm;
-    game_.SetControls(controls);
+    ApplyControlSettings();
 }
 
 void App::InitLua() {
@@ -383,10 +382,13 @@ void App::HandleMenus(bool& running) {
     auto down_pressed = input_.KeyPressed(SDLK_DOWN) || input_.KeyPressed(SDLK_s);
     auto left_pressed = input_.KeyPressed(SDLK_LEFT) || input_.KeyPressed(SDLK_a);
     auto right_pressed = input_.KeyPressed(SDLK_RIGHT) || input_.KeyPressed(SDLK_d);
-    const bool enter_pressed = input_.KeyPressed(SDLK_RETURN);
-    const bool esc_pressed = input_.KeyPressed(SDLK_ESCAPE);
-    const bool restart_pressed = input_.KeyPressed(config_.Data().keys.restart);
-    const bool pause_pressed = input_.KeyPressed(config_.Data().keys.pause);
+    auto action_pressed = [&](const snake::io::KeyPair& keys) {
+        return input_.KeyPressed(keys.primary) || input_.KeyPressed(keys.secondary);
+    };
+    const bool confirm_pressed = action_pressed(config_.Data().keys.confirm);
+    const bool menu_pressed = action_pressed(config_.Data().keys.menu);
+    const bool restart_pressed = action_pressed(config_.Data().keys.restart);
+    const bool pause_pressed = action_pressed(config_.Data().keys.pause);
 
     switch (sm_.Current()) {
         case snake::game::Screen::MainMenu: {
@@ -395,7 +397,7 @@ void App::HandleMenus(bool& running) {
             } else if (down_pressed) {
                 menu_index_ = (menu_index_ + 1) % static_cast<int>(menu_items_.size());
             }
-            if (enter_pressed) {
+            if (confirm_pressed) {
                 switch (menu_index_) {
                     case 0:
                         start_round();
@@ -413,19 +415,19 @@ void App::HandleMenus(bool& running) {
                         break;
                 }
             }
-            if (esc_pressed) {
+            if (menu_pressed) {
                 running = false;
             }
             break;
         }
         case snake::game::Screen::Options:
             HandleOptionsInput();
-            if (esc_pressed) {
+            if (!rebinding_ && menu_pressed) {
                 sm_.BackToMenu();
             }
             break;
         case snake::game::Screen::Highscores:
-            if (esc_pressed) {
+            if (menu_pressed) {
                 sm_.BackToMenu();
             }
             break;
@@ -437,7 +439,7 @@ void App::HandleMenus(bool& running) {
             if (restart_pressed) {
                 start_round();
             }
-            if (esc_pressed) {
+            if (menu_pressed) {
                 sm_.BackToMenu();
                 game_.ResetAll();
             }
@@ -450,16 +452,16 @@ void App::HandleMenus(bool& running) {
             if (restart_pressed) {
                 start_round();
             }
-            if (esc_pressed) {
+            if (menu_pressed) {
                 sm_.BackToMenu();
                 game_.ResetAll();
             }
             break;
         case snake::game::Screen::GameOver:
-            if (restart_pressed || enter_pressed) {
+            if (restart_pressed || confirm_pressed) {
                 start_round();
             }
-            if (esc_pressed) {
+            if (menu_pressed) {
                 sm_.BackToMenu();
                 game_.ResetAll();
             }
@@ -526,156 +528,194 @@ void App::HandleOptionsInput() {
     const auto config_path = snake::io::UserPath("config.lua");
     auto& data = config_.Data();
 
-    auto save_and_notify = [&](const std::string& key) {
+    auto persist = [&]() {
         config_.Sanitize();
-        config_.SaveToFile(config_path);
+        if (!config_.SaveToFile(config_path)) {
+            SDL_Log("Failed to save config to %s", config_path.string().c_str());
+        }
+    };
+
+    auto notify_and_apply = [&](const std::string& key, const std::function<void()>& apply_fn) {
+        persist();
+        if (apply_fn) {
+            apply_fn();
+        }
         NotifySettingChanged(key);
     };
 
     auto apply_next_round = [&]() {
         pending_round_restart_ = true;
-        PushUiMessage("Will apply on Restart");
+        PushUiMessage("Applies on restart");
     };
-
-    auto apply_video_now = [&]() { ApplyNowVideoSettings(); };
-    auto apply_audio_now = [&]() { ApplyAudioSettings(); };
 
     auto up_pressed = input_.KeyPressed(SDLK_UP) || input_.KeyPressed(SDLK_w);
     auto down_pressed = input_.KeyPressed(SDLK_DOWN) || input_.KeyPressed(SDLK_s);
     auto left_pressed = input_.KeyPressed(SDLK_LEFT) || input_.KeyPressed(SDLK_a);
     auto right_pressed = input_.KeyPressed(SDLK_RIGHT) || input_.KeyPressed(SDLK_d);
-    const bool enter_pressed = input_.KeyPressed(SDLK_RETURN);
+    auto action_pressed = [&](const snake::io::KeyPair& keys) {
+        return input_.KeyPressed(keys.primary) || input_.KeyPressed(keys.secondary);
+    };
+    const bool confirm_pressed = action_pressed(config_.Data().keys.confirm);
+    const bool menu_pressed = action_pressed(config_.Data().keys.menu);
 
-    const int options_count = 20;
+    if (menu_pressed) {
+        sm_.BackToMenu();
+        return;
+    }
+
+    const int options_count = 21;
     if (up_pressed) {
         options_index_ = (options_index_ + options_count - 1) % options_count;
     } else if (down_pressed) {
         options_index_ = (options_index_ + 1) % options_count;
     }
 
-    auto adjust_int = [&](int& value, int delta, int min_v, int max_v, const std::string& key, bool apply_now) {
+    auto adjust_int = [&](int& value, int delta, int min_v, int max_v, const std::string& key, bool apply_now, const std::function<void()>& apply_fn = {}) {
         const int before = value;
         value = std::clamp(value + delta, min_v, max_v);
         if (value != before) {
-            save_and_notify(key);
             if (apply_now) {
-                apply_video_now();
+                notify_and_apply(key, apply_fn);
             } else {
+                persist();
                 apply_next_round();
+                NotifySettingChanged(key);
             }
         }
     };
 
     switch (options_index_) {
-        case 0:  // window.width
-            if (left_pressed) adjust_int(data.video.window_w, -16, 320, 3840, "window.width", true);
-            if (right_pressed) adjust_int(data.video.window_w, 16, 320, 3840, "window.width", true);
+        case 0:  // board_w
+            if (left_pressed) adjust_int(data.grid.board_w, -1, 5, 60, "grid.board_w", false);
+            if (right_pressed) adjust_int(data.grid.board_w, 1, 5, 60, "grid.board_w", false);
             break;
-        case 1:  // window.height
-            if (left_pressed) adjust_int(data.video.window_h, -16, 320, 3840, "window.height", true);
-            if (right_pressed) adjust_int(data.video.window_h, 16, 320, 3840, "window.height", true);
+        case 1:  // board_h
+            if (left_pressed) adjust_int(data.grid.board_h, -1, 5, 60, "grid.board_h", false);
+            if (right_pressed) adjust_int(data.grid.board_h, 1, 5, 60, "grid.board_h", false);
             break;
-        case 2:  // fullscreen
-            if (enter_pressed) {
-                data.video.fullscreen_desktop = !data.video.fullscreen_desktop;
-                apply_video_now();
-                save_and_notify("window.fullscreen_desktop");
-            }
+        case 2:  // tile_size
+            if (left_pressed) adjust_int(data.grid.tile_size, -2, 8, 128, "grid.tile_size", true);
+            if (right_pressed) adjust_int(data.grid.tile_size, 2, 8, 128, "grid.tile_size", true);
             break;
-        case 3:  // vsync
-            if (enter_pressed) {
-                data.video.vsync = !data.video.vsync;
-                const bool recreated = RecreateRenderer(data.video.vsync);
-                if (!recreated) {
-                    data.video.vsync = !data.video.vsync;
-                }
-                save_and_notify("window.vsync");
-            }
-            break;
-        case 4:  // ui.panel_mode
-            if (enter_pressed) {
-                data.ui.panel_mode = (data.ui.panel_mode == "auto") ? "top" : (data.ui.panel_mode == "top" ? "right" : "auto");
-                save_and_notify("ui.panel_mode");
-            }
-            break;
-        case 5:  // board_w
-            if (left_pressed) adjust_int(data.game.board_w, -1, 5, 60, "grid.board_w", false);
-            if (right_pressed) adjust_int(data.game.board_w, 1, 5, 60, "grid.board_w", false);
-            break;
-        case 6:  // board_h
-            if (left_pressed) adjust_int(data.game.board_h, -1, 5, 60, "grid.board_h", false);
-            if (right_pressed) adjust_int(data.game.board_h, 1, 5, 60, "grid.board_h", false);
-            break;
-        case 7:  // tile_size
-            if (left_pressed) adjust_int(data.video.tile_px, -1, 8, 128, "grid.tile_size", true);
-            if (right_pressed) adjust_int(data.video.tile_px, 1, 8, 128, "grid.tile_size", true);
-            break;
-        case 8:  // wrap_mode
-            if (enter_pressed) {
-                data.game.walls = (data.game.walls == snake::io::WallMode::Wrap) ? snake::io::WallMode::Death : snake::io::WallMode::Wrap;
-                save_and_notify("grid.wrap_mode");
+        case 3:  // wrap_mode
+            if (confirm_pressed) {
+                data.grid.wrap_mode = !data.grid.wrap_mode;
+                persist();
                 apply_next_round();
+                NotifySettingChanged("grid.wrap_mode");
             }
             break;
-        case 9:  // audio enabled
-            if (enter_pressed) {
+        case 4:  // window.width
+            if (left_pressed) adjust_int(data.window.width, -16, 320, 3840, "window.width", true, [&]() { ApplyNowVideoSettings(); });
+            if (right_pressed) adjust_int(data.window.width, 16, 320, 3840, "window.width", true, [&]() { ApplyNowVideoSettings(); });
+            break;
+        case 5:  // window.height
+            if (left_pressed) adjust_int(data.window.height, -16, 320, 3840, "window.height", true, [&]() { ApplyNowVideoSettings(); });
+            if (right_pressed) adjust_int(data.window.height, 16, 320, 3840, "window.height", true, [&]() { ApplyNowVideoSettings(); });
+            break;
+        case 6:  // fullscreen
+            if (confirm_pressed) {
+                data.window.fullscreen_desktop = !data.window.fullscreen_desktop;
+                notify_and_apply("window.fullscreen_desktop", [&]() { ApplyNowVideoSettings(); });
+            }
+            break;
+        case 7:  // vsync
+            if (confirm_pressed) {
+                const bool prev = data.window.vsync;
+                data.window.vsync = !data.window.vsync;
+                persist();
+                if (!RecreateRenderer(data.window.vsync)) {
+                    data.window.vsync = prev;
+                    persist();
+                } else {
+                    vsync_enabled_ = data.window.vsync;
+                }
+                NotifySettingChanged("window.vsync");
+            }
+            break;
+        case 8:  // audio enabled
+            if (confirm_pressed) {
                 data.audio.enabled = !data.audio.enabled;
-                apply_audio_now();
-                save_and_notify("audio.enabled");
+                notify_and_apply("audio.enabled", [&]() { ApplyAudioSettings(); });
             }
             break;
-        case 10:  // master volume
-            if (left_pressed) adjust_int(data.audio.master_volume, -8, 0, 128, "audio.master_volume", true);
-            if (right_pressed) adjust_int(data.audio.master_volume, 8, 0, 128, "audio.master_volume", true);
-            apply_audio_now();
+        case 9:  // master volume
+            if (left_pressed) adjust_int(data.audio.master_volume, -8, 0, 128, "audio.master_volume", true, [&]() { ApplyAudioSettings(); });
+            if (right_pressed) adjust_int(data.audio.master_volume, 8, 0, 128, "audio.master_volume", true, [&]() { ApplyAudioSettings(); });
             break;
-        case 11:  // food score
-            if (left_pressed) adjust_int(data.game.food_score, -1, 1, 1000, "gameplay.food_score", false);
-            if (right_pressed) adjust_int(data.game.food_score, 1, 1, 1000, "gameplay.food_score", false);
+        case 10:  // sfx volume
+            if (left_pressed) adjust_int(data.audio.sfx_volume, -8, 0, 128, "audio.sfx_volume", true, [&]() { ApplyAudioSettings(); });
+            if (right_pressed) adjust_int(data.audio.sfx_volume, 8, 0, 128, "audio.sfx_volume", true, [&]() { ApplyAudioSettings(); });
             break;
-        case 12: if (enter_pressed) BeginRebind("up"); break;
-        case 13: if (enter_pressed) BeginRebind("down"); break;
-        case 14: if (enter_pressed) BeginRebind("left"); break;
-        case 15: if (enter_pressed) BeginRebind("right"); break;
-        case 16: if (enter_pressed) BeginRebind("pause"); break;
-        case 17: if (enter_pressed) BeginRebind("restart"); break;
-        case 18: if (enter_pressed) BeginRebind("menu"); break;
-        case 19: if (enter_pressed) BeginRebind("confirm"); break;
+        case 11:  // ui.panel_mode
+            if (confirm_pressed || left_pressed || right_pressed) {
+                if (left_pressed) {
+                    if (data.ui.panel_mode == "auto") data.ui.panel_mode = "right";
+                    else if (data.ui.panel_mode == "right") data.ui.panel_mode = "top";
+                    else data.ui.panel_mode = "auto";
+                } else {
+                    data.ui.panel_mode = (data.ui.panel_mode == "auto") ? "top" : (data.ui.panel_mode == "top" ? "right" : "auto");
+                }
+                notify_and_apply("ui.panel_mode", {});
+            }
+            break;
+        case 12: if (confirm_pressed || left_pressed || right_pressed) BeginRebind("up", left_pressed ? 0 : (right_pressed ? 1 : 0)); break;
+        case 13: if (confirm_pressed || left_pressed || right_pressed) BeginRebind("down", left_pressed ? 0 : (right_pressed ? 1 : 0)); break;
+        case 14: if (confirm_pressed || left_pressed || right_pressed) BeginRebind("left", left_pressed ? 0 : (right_pressed ? 1 : 0)); break;
+        case 15: if (confirm_pressed || left_pressed || right_pressed) BeginRebind("right", left_pressed ? 0 : (right_pressed ? 1 : 0)); break;
+        case 16: if (confirm_pressed || left_pressed || right_pressed) BeginRebind("pause", left_pressed ? 0 : (right_pressed ? 1 : 0)); break;
+        case 17: if (confirm_pressed || left_pressed || right_pressed) BeginRebind("restart", left_pressed ? 0 : (right_pressed ? 1 : 0)); break;
+        case 18: if (confirm_pressed || left_pressed || right_pressed) BeginRebind("menu", left_pressed ? 0 : (right_pressed ? 1 : 0)); break;
+        case 19: if (confirm_pressed || left_pressed || right_pressed) BeginRebind("confirm", left_pressed ? 0 : (right_pressed ? 1 : 0)); break;
+        case 20:
+            if (confirm_pressed) {
+                sm_.BackToMenu();
+            }
+            break;
         default:
             break;
     }
 }
 
-void App::BeginRebind(const std::string& action) {
+void App::BeginRebind(const std::string& action, int slot) {
     rebinding_ = true;
     rebind_action_ = action;
+    rebind_slot_ = (slot == 1) ? 1 : 0;
 }
 
 void App::HandleRebind() {
     const auto config_path = snake::io::UserPath("config.lua");
-    if (input_.KeyPressed(SDLK_ESCAPE)) {
-        rebinding_ = false;
-        rebind_action_.clear();
-        return;
+    if (input_.KeyPressed(SDLK_RETURN)) {
+        rebind_slot_ = 1 - rebind_slot_;
+    }
+    if (input_.KeyPressed(SDLK_LEFT)) {
+        rebind_slot_ = 0;
+    } else if (input_.KeyPressed(SDLK_RIGHT)) {
+        rebind_slot_ = 1;
     }
     const std::vector<SDL_Keycode> allowed{SDLK_UP, SDLK_DOWN, SDLK_LEFT, SDLK_RIGHT, SDLK_w, SDLK_a, SDLK_s, SDLK_d,
                                            SDLK_RETURN, SDLK_ESCAPE, SDLK_p, SDLK_r};
     for (auto key : allowed) {
         if (input_.KeyPressed(key)) {
-            if (config_.SetBind(rebind_action_, key)) {
-                config_.SaveToFile(config_path);
+            if (config_.SetBind(rebind_action_, key, rebind_slot_)) {
+                config_.Sanitize();
+                if (!config_.SaveToFile(config_path)) {
+                    SDL_Log("Failed to save config after rebinding");
+                }
+                ApplyControlSettings();
                 NotifySettingChanged("keybinds." + rebind_action_);
             }
             rebinding_ = false;
             rebind_action_.clear();
+            rebind_slot_ = 0;
             return;
         }
     }
 }
 
 void App::ApplyNowVideoSettings() {
-    SDL_SetWindowSize(window_, config_.Data().video.window_w, config_.Data().video.window_h);
-    if (config_.Data().video.fullscreen_desktop) {
+    SDL_SetWindowSize(window_, config_.Data().window.width, config_.Data().window.height);
+    if (config_.Data().window.fullscreen_desktop) {
         SDL_SetWindowFullscreen(window_, SDL_WINDOW_FULLSCREEN_DESKTOP);
     } else {
         SDL_SetWindowFullscreen(window_, 0);
@@ -684,11 +724,31 @@ void App::ApplyNowVideoSettings() {
 }
 
 void App::ApplyAudioSettings() {
-    if (!config_.Data().audio.enabled) {
-        audio_.SetMasterVolume(0);
-    } else {
-        audio_.SetMasterVolume(config_.Data().audio.master_volume);
-    }
+    audio_.SetEnabled(config_.Data().audio.enabled);
+    audio_.SetMasterVolume(config_.Data().audio.master_volume);
+    audio_.SetSfxVolume(config_.Data().audio.sfx_volume);
+}
+
+void App::ApplyControlSettings() {
+    const auto& keys = config_.Data().keys;
+    snake::game::Game::Controls controls{};
+    controls.up.primary = keys.up.primary;
+    controls.up.secondary = keys.up.secondary;
+    controls.down.primary = keys.down.primary;
+    controls.down.secondary = keys.down.secondary;
+    controls.left.primary = keys.left.primary;
+    controls.left.secondary = keys.left.secondary;
+    controls.right.primary = keys.right.primary;
+    controls.right.secondary = keys.right.secondary;
+    controls.pause.primary = keys.pause.primary;
+    controls.pause.secondary = keys.pause.secondary;
+    controls.restart.primary = keys.restart.primary;
+    controls.restart.secondary = keys.restart.secondary;
+    controls.menu.primary = keys.menu.primary;
+    controls.menu.secondary = keys.menu.secondary;
+    controls.confirm.primary = keys.confirm.primary;
+    controls.confirm.secondary = keys.confirm.secondary;
+    game_.SetControls(controls);
 }
 
 void App::NotifySettingChanged(const std::string& key) {
@@ -708,50 +768,60 @@ void App::NotifySettingChanged(const std::string& key) {
     lua_pushlstring(L, key.data(), key.size());
 
     const auto& d = config_.Data();
+    auto push_keypair = [&](const snake::io::KeyPair& kp) {
+        const std::string a = snake::io::Config::KeycodeToToken(kp.primary);
+        const std::string b = snake::io::Config::KeycodeToToken(kp.secondary);
+        lua_createtable(L, 2, 0);
+        lua_pushlstring(L, a.c_str(), a.size());
+        lua_rawseti(L, -2, 1);
+        lua_pushlstring(L, b.c_str(), b.size());
+        lua_rawseti(L, -2, 2);
+    };
+
     if (key == "window.width") {
-        lua_pushinteger(L, d.video.window_w);
+        lua_pushinteger(L, d.window.width);
     } else if (key == "window.height") {
-        lua_pushinteger(L, d.video.window_h);
+        lua_pushinteger(L, d.window.height);
     } else if (key == "window.fullscreen_desktop") {
-        lua_pushboolean(L, d.video.fullscreen_desktop);
+        lua_pushboolean(L, d.window.fullscreen_desktop);
     } else if (key == "window.vsync") {
-        lua_pushboolean(L, d.video.vsync);
+        lua_pushboolean(L, d.window.vsync);
     } else if (key == "ui.panel_mode") {
         lua_pushlstring(L, d.ui.panel_mode.c_str(), d.ui.panel_mode.size());
     } else if (key == "grid.board_w") {
-        lua_pushinteger(L, d.game.board_w);
+        lua_pushinteger(L, d.grid.board_w);
     } else if (key == "grid.board_h") {
-        lua_pushinteger(L, d.game.board_h);
+        lua_pushinteger(L, d.grid.board_h);
     } else if (key == "grid.tile_size") {
-        lua_pushinteger(L, d.video.tile_px);
+        lua_pushinteger(L, d.grid.tile_size);
     } else if (key == "grid.wrap_mode") {
-        lua_pushboolean(L, d.game.walls == snake::io::WallMode::Wrap);
+        lua_pushboolean(L, d.grid.wrap_mode);
     } else if (key == "audio.enabled") {
         lua_pushboolean(L, d.audio.enabled);
     } else if (key == "audio.master_volume") {
         lua_pushinteger(L, d.audio.master_volume);
-    } else if (key == "gameplay.food_score") {
-        lua_pushinteger(L, d.game.food_score);
-    } else if (key == "keybinds.up") {
-        lua_pushstring(L, SDL_GetKeyName(d.keys.up));
-    } else if (key == "keybinds.down") {
-        lua_pushstring(L, SDL_GetKeyName(d.keys.down));
-    } else if (key == "keybinds.left") {
-        lua_pushstring(L, SDL_GetKeyName(d.keys.left));
-    } else if (key == "keybinds.right") {
-        lua_pushstring(L, SDL_GetKeyName(d.keys.right));
-    } else if (key == "keybinds.pause") {
-        lua_pushstring(L, SDL_GetKeyName(d.keys.pause));
-    } else if (key == "keybinds.restart") {
-        lua_pushstring(L, SDL_GetKeyName(d.keys.restart));
-    } else if (key == "keybinds.menu") {
-        lua_pushstring(L, SDL_GetKeyName(d.keys.menu));
-    } else if (key == "keybinds.confirm") {
-        lua_pushstring(L, SDL_GetKeyName(d.keys.confirm));
+    } else if (key == "audio.sfx_volume") {
+        lua_pushinteger(L, d.audio.sfx_volume);
+    } else if (key.rfind("keybinds.", 0) == 0) {
+        const std::string action = key.substr(std::string("keybinds.").size());
+        if (action == "up") push_keypair(d.keys.up);
+        else if (action == "down") push_keypair(d.keys.down);
+        else if (action == "left") push_keypair(d.keys.left);
+        else if (action == "right") push_keypair(d.keys.right);
+        else if (action == "pause") push_keypair(d.keys.pause);
+        else if (action == "restart") push_keypair(d.keys.restart);
+        else if (action == "menu") push_keypair(d.keys.menu);
+        else if (action == "confirm") push_keypair(d.keys.confirm);
+        else lua_pushnil(L);
     } else {
         lua_pushnil(L);
     }
-    lua_pcall(L, 3, 0, 0);
+
+    if (lua_pcall(L, 3, 0, 0) != LUA_OK) {
+        const char* err = lua_tostring(L, -1);
+        SDL_Log("on_setting_changed failed: %s", err ? err : "unknown error");
+        lua_pop(L, 1);
+    }
 }
 
 }  // namespace snake::core

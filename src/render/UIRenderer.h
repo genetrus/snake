@@ -29,6 +29,8 @@ struct UiFrameData {
     int menu_index = 0;
     int options_index = 0;
     bool rebinding = false;
+    std::string rebind_action;
+    int rebind_slot = 0;
     bool pending_round_restart = false;
     std::string ui_message;
     std::string lua_error;

@@ -166,12 +166,14 @@ void UIRenderer::RenderOptions(SDL_Renderer* r, const Layout& l, const UiFrameDa
     }
 
     if (ui.rebinding) {
-        DrawTextLine(r, start_x, y + gap, "Press a key to rebind...");
+        std::ostringstream msg;
+        msg << "Rebinding " << ui.rebind_action << " slot " << (ui.rebind_slot + 1) << " - press allowed key";
+        DrawTextLine(r, start_x, y + gap, msg.str());
     } else {
-        DrawTextLine(r, start_x, y + gap, "Left/Right change, Enter toggle/begin rebind, Esc back");
+        DrawTextLine(r, start_x, y + gap, "Up/Down: select  |  Left/Right: adjust  |  Confirm: toggle/edit  |  Esc/Menu: Back");
     }
     if (ui.pending_round_restart) {
-        DrawTextLine(r, start_x, y + gap + row_h, "Will apply on Restart");
+        DrawTextLine(r, start_x, y + gap + row_h, "Applies on restart");
     }
 }
 

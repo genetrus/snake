@@ -4,7 +4,6 @@ return {
     height = 800,
     fullscreen_desktop = false,
     vsync = true,
-    panel_mode = "auto", -- "auto" | "top" | "right"
   },
 
   grid = {
@@ -18,6 +17,10 @@ return {
     enabled = true,
     master_volume = 96, -- 0..128
     sfx_volume = 96,    -- 0..128
+  },
+
+  ui = {
+    panel_mode = "auto", -- "auto" | "top" | "right"
   },
 
   keybinds = {

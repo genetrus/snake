@@ -79,7 +79,7 @@ void SFX::Play(SfxId id) {
         return;
     }
 
-    Mix_VolumeChunk(chunk, sys_->MasterVolume());
+    Mix_VolumeChunk(chunk, sys_->SfxVolume());
     Mix_PlayChannel(-1, chunk, 0);
 }
 
@@ -88,7 +88,7 @@ void SFX::ApplyVolume() {
         return;
     }
 
-    const int volume = sys_->MasterVolume();
+    const int volume = sys_->SfxVolume();
     auto apply = [volume](Mix_Chunk* chunk) {
         if (chunk != nullptr) {
             Mix_VolumeChunk(chunk, volume);
