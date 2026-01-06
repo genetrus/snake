@@ -98,12 +98,13 @@ int App::Run() {
             game_.HandleInput(input_);
 
             // Compute speed from Lua
-            double base_tps = last_ticks_per_sec_;
+            const int score = game_.GetScore().Score();
+            double base_tps = last_base_ticks_per_sec_;
             if (lua_.IsReady()) {
                 double lua_tps = 0.0;
-                if (lua_.GetSpeedTicksPerSec(game_.GetScore().Score(), &lua_tps)) {
+                if (lua_.GetBaseTicksPerSec(score, &lua_tps)) {
                     base_tps = lua_tps;
-                    last_ticks_per_sec_ = lua_tps;
+                    last_base_ticks_per_sec_ = lua_tps;
                 }
             }
 
