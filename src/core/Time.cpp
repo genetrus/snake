@@ -21,8 +21,11 @@ void Time::UpdateFrame() {
     frame_dt_ = static_cast<double>(delta) * frequency_inv_;
     last_counter_ = current;
 
+    constexpr double kMaxFrameDt = 0.25;  // avoid huge dt after breakpoint
     if (frame_dt_ < 0.0) {
         frame_dt_ = 0.0;
+    } else if (frame_dt_ > kMaxFrameDt) {
+        frame_dt_ = kMaxFrameDt;
     }
 
     accumulator_ += frame_dt_;
@@ -39,13 +42,18 @@ double Time::Now() const {
 }
 
 void Time::SetTickDt(double seconds) {
-    if (seconds > 0.0) {
-        tick_dt_ = seconds;
+    constexpr double kMinTickDt = 1.0 / 240.0;
+    constexpr double kMaxTickDt = 0.5;
+    if (seconds <= 0.0) {
+        return;
     }
+    if (seconds < kMinTickDt) seconds = kMinTickDt;
+    if (seconds > kMaxTickDt) seconds = kMaxTickDt;
+    tick_dt_ = seconds;
 }
 
 bool Time::ConsumeTick() {
-    if (accumulator_ >= tick_dt_) {
+    if (HasPendingTick()) {
         accumulator_ -= tick_dt_;
         return true;
     }
@@ -55,6 +63,16 @@ bool Time::ConsumeTick() {
 
 double Time::TickDt() const {
     return tick_dt_;
+}
+
+bool Time::HasPendingTick() const {
+    return accumulator_ >= tick_dt_;
+}
+
+void Time::DropAccumulatorToOneTick() {
+    if (accumulator_ > tick_dt_) {
+        accumulator_ = tick_dt_;
+    }
 }
 
 }  // namespace snake::core

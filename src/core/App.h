@@ -3,8 +3,18 @@
 #include <SDL.h>
 
 #include "core/Input.h"
+#include "core/Time.h"
+#include "audio/AudioSystem.h"
+#include "game/Game.h"
+#include "lua/LuaRuntime.h"
+#include "io/Config.h"
 
 namespace snake::core {
+
+struct AppLuaContext {
+    snake::game::Game* game = nullptr;
+    snake::audio::AudioSystem* audio = nullptr;
+};
 
 class App {
 public:
@@ -22,6 +32,9 @@ private:
     void InitSDL();
     void CreateWindowAndRenderer();
     void ShutdownSDL();
+    void RenderFrame();
+    void ApplyConfig();
+    void InitLua();
 
     SDL_Window* window_ = nullptr;
     SDL_Renderer* renderer_ = nullptr;
@@ -33,5 +46,12 @@ private:
     bool sdl_initialized_ = false;
 
     Input input_;
+    Time time_;
+    snake::game::Game game_;
+    snake::audio::AudioSystem audio_;
+    snake::lua::LuaRuntime lua_;
+    snake::io::Config config_;
+    AppLuaContext lua_ctx_{};
+    double last_ticks_per_sec_ = 10.0;
 };
 }  // namespace snake::core

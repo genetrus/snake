@@ -4,11 +4,16 @@
 
 #include <stdexcept>
 
+#include "audio/AudioSystem.h"
+#include "io/Paths.h"
+#include "lua/Bindings.h"
+
 namespace snake::core {
 
 namespace {
 constexpr int kDefaultWindowW = 800;
 constexpr int kDefaultWindowH = 800;
+constexpr int kMaxTicksPerFrame = 10;
 }  // namespace
 
 App::App() = default;
@@ -21,6 +26,14 @@ int App::Run() {
     try {
         InitSDL();
         CreateWindowAndRenderer();
+        time_.Init();
+        lua_ctx_.game = &game_;
+        lua_ctx_.audio = &audio_;
+
+        audio_.Init();
+        config_.LoadFromFile(snake::io::UserPath("config.lua"));
+        ApplyConfig();
+        InitLua();
 
         bool running = true;
         while (running) {
@@ -59,9 +72,50 @@ int App::Run() {
                 running = false;
             }
 
-            SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);
-            SDL_RenderClear(renderer_);
-            SDL_RenderPresent(renderer_);
+            time_.UpdateFrame();
+
+            // Per-frame input (direction/state changes)
+            game_.HandleInput(input_);
+
+            // Compute speed from Lua
+            double base_tps = last_ticks_per_sec_;
+            if (lua_.IsReady()) {
+                double lua_tps = 0.0;
+                if (lua_.GetSpeedTicksPerSec(game_.GetScore().Score(), &lua_tps)) {
+                    base_tps = lua_tps;
+                    last_ticks_per_sec_ = lua_tps;
+                }
+            }
+
+            const bool slow_active = game_.GetEffects().SlowActive();
+            const double slow_multiplier =
+                slow_active ? game_.GetEffects().SlowMultiplier() : 1.0;
+            const double effective_tps = base_tps * slow_multiplier;
+            const double tick_dt = effective_tps > 0.0 ? 1.0 / effective_tps : 0.1;
+            time_.SetTickDt(tick_dt);
+
+            int ticks_done = 0;
+            while (time_.ConsumeTick() && ticks_done < kMaxTicksPerFrame) {
+                lua_.CallWithCtxIfExists("on_tick_begin", &lua_ctx_);
+
+                const auto state_before = game_.State();
+                game_.Tick(time_.TickDt());
+                const auto state_after = game_.State();
+
+                if (state_after != snake::game::State::GameOver) {
+                    lua_.CallWithCtxIfExists("on_tick_end", &lua_ctx_);
+                } else if (state_before != snake::game::State::GameOver) {
+                    // no end hook when switched to GameOver during tick
+                }
+
+                ++ticks_done;
+            }
+
+            if (ticks_done >= kMaxTicksPerFrame) {
+                time_.DropAccumulatorToOneTick();
+            }
+
+            RenderFrame();
         }
     } catch (const std::exception& ex) {
         SDL_Log("App run failed: %s", ex.what());
@@ -126,6 +180,8 @@ void App::CreateWindowAndRenderer() {
 }
 
 void App::ShutdownSDL() {
+    audio_.Shutdown();
+
     if (renderer_ != nullptr) {
         SDL_DestroyRenderer(renderer_);
         renderer_ = nullptr;
@@ -139,6 +195,52 @@ void App::ShutdownSDL() {
     if (sdl_initialized_) {
         SDL_Quit();
         sdl_initialized_ = false;
+    }
+}
+
+void App::RenderFrame() {
+    SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);
+    SDL_RenderClear(renderer_);
+    SDL_RenderPresent(renderer_);
+}
+
+void App::ApplyConfig() {
+    const auto& data = config_.Data();
+    game_.SetBoardSize(data.game.board_w, data.game.board_h);
+    game_.SetWrapMode(data.game.walls == snake::io::WallMode::Wrap);
+    game_.SetFoodScore(data.game.food_score);
+    game_.SetBonusScore(data.game.bonus_score);
+    game_.SetSlowParams(data.game.slow_multiplier, data.game.slow_duration_sec);
+
+    snake::game::Game::Controls controls{};
+    controls.up = data.keys.up;
+    controls.down = data.keys.down;
+    controls.left = data.keys.left;
+    controls.right = data.keys.right;
+    controls.pause = data.keys.pause;
+    controls.restart = data.keys.restart;
+    controls.menu = data.keys.menu;
+    controls.confirm = data.keys.confirm;
+    game_.SetControls(controls);
+
+    game_.ResetAll();
+}
+
+void App::InitLua() {
+    if (!lua_.Init()) {
+        SDL_Log("Failed to init Lua runtime");
+        return;
+    }
+
+    snake::lua::Bindings::Register(lua_.L());
+
+    const auto rules_path = snake::io::AssetsPath("scripts/rules.lua");
+    const auto config_path = snake::io::UserPath("config.lua");
+    if (!lua_.LoadRules(rules_path)) {
+        SDL_Log("Failed to load Lua rules");
+    }
+    if (!lua_.LoadConfig(config_path)) {
+        SDL_Log("Failed to load Lua config");
     }
 }
 
