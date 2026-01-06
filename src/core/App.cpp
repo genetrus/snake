@@ -50,7 +50,7 @@ int App::Run() {
         audio_.Init();
         ApplyConfig();
         ApplyAudioSettings();
-        ApplyImmediateSettings(pending_config_.Data());
+        ApplyImmediateSettings(active_config_.Data(), pending_config_.Data());
         InitLua();
 
         bool running = true;
@@ -205,6 +205,12 @@ void App::RenderFrame() {
     rs.panel_mode = active_config_.Data().ui.panel_mode;
 
     std::string overlay_error_text = renderer_error_text_;
+    if (!config_error_text_.empty()) {
+        if (!overlay_error_text.empty()) {
+            overlay_error_text.append(" | ");
+        }
+        overlay_error_text.append(config_error_text_);
+    }
     if (const auto& err = lua_.LastError()) {
         if (!overlay_error_text.empty()) {
             overlay_error_text.append(" | ");
@@ -512,34 +518,6 @@ void App::HandleMenus(bool& running) {
 }
 
 void App::HandleOptionsInput() {
-    auto& data = pending_config_.Data();
-
-    auto persist = [&]() {
-        pending_config_.Sanitize();
-        if (!pending_config_.SaveToFile(config_path_)) {
-            SDL_Log("Failed to save config to %s", config_path_.string().c_str());
-        }
-    };
-
-    auto notify_and_apply = [&](const std::string& key, const std::function<void()>& apply_fn, bool sync_before_apply) {
-        persist();
-        if (sync_before_apply) {
-            SyncActiveWithPendingPreserveRound();
-        }
-        if (apply_fn) {
-            apply_fn();
-        }
-        if (!sync_before_apply) {
-            SyncActiveWithPendingPreserveRound();
-        }
-        NotifySettingChanged(key);
-    };
-
-    auto apply_next_round = [&]() {
-        RefreshPendingRoundRestartFlag();
-        PushUiMessage("Applies on restart");
-    };
-
     auto up_pressed = input_.KeyPressed(SDLK_UP) || input_.KeyPressed(SDLK_w);
     auto down_pressed = input_.KeyPressed(SDLK_DOWN) || input_.KeyPressed(SDLK_s);
     auto left_pressed = input_.KeyPressed(SDLK_LEFT) || input_.KeyPressed(SDLK_a);
@@ -562,85 +540,236 @@ void App::HandleOptionsInput() {
         options_index_ = (options_index_ + 1) % options_count;
     }
 
-    auto adjust_int = [&](int& value, int delta, int min_v, int max_v, const std::string& key, bool apply_now, const std::function<void()>& apply_fn = {}, bool sync_before_apply = false) {
-        const int before = value;
-        value = std::clamp(value + delta, min_v, max_v);
-        if (value != before) {
-            if (apply_now) {
-                notify_and_apply(key, apply_fn, sync_before_apply);
-            } else {
-                persist();
-                apply_next_round();
-                NotifySettingChanged(key);
-            }
+    auto commit_immediate = [&](const std::string& key,
+                                const std::function<bool(snake::io::ConfigData&)>& mutate,
+                                const std::function<bool(const snake::io::ConfigData&, const snake::io::ConfigData&)>& apply = {}) {
+        CommitConfigChange(key, ApplyMode::Immediate, mutate, apply);
+    };
+
+    auto commit_on_restart = [&](const std::string& key,
+                                 const std::function<bool(snake::io::ConfigData&)>& mutate) {
+        if (CommitConfigChange(key, ApplyMode::OnRestart, mutate, {})) {
+            PushUiMessage("Applies on restart");
         }
     };
 
     switch (options_index_) {
         case 0:  // board_w
-            if (left_pressed) adjust_int(data.grid.board_w, -1, 5, 60, "grid.board_w", false);
-            if (right_pressed) adjust_int(data.grid.board_w, 1, 5, 60, "grid.board_w", false);
+            if (left_pressed) {
+                commit_on_restart("grid.board_w", [](snake::io::ConfigData& cfg) {
+                    const int before = cfg.grid.board_w;
+                    cfg.grid.board_w = std::clamp(cfg.grid.board_w - 1, 5, 60);
+                    return cfg.grid.board_w != before;
+                });
+            }
+            if (right_pressed) {
+                commit_on_restart("grid.board_w", [](snake::io::ConfigData& cfg) {
+                    const int before = cfg.grid.board_w;
+                    cfg.grid.board_w = std::clamp(cfg.grid.board_w + 1, 5, 60);
+                    return cfg.grid.board_w != before;
+                });
+            }
             break;
         case 1:  // board_h
-            if (left_pressed) adjust_int(data.grid.board_h, -1, 5, 60, "grid.board_h", false);
-            if (right_pressed) adjust_int(data.grid.board_h, 1, 5, 60, "grid.board_h", false);
+            if (left_pressed) {
+                commit_on_restart("grid.board_h", [](snake::io::ConfigData& cfg) {
+                    const int before = cfg.grid.board_h;
+                    cfg.grid.board_h = std::clamp(cfg.grid.board_h - 1, 5, 60);
+                    return cfg.grid.board_h != before;
+                });
+            }
+            if (right_pressed) {
+                commit_on_restart("grid.board_h", [](snake::io::ConfigData& cfg) {
+                    const int before = cfg.grid.board_h;
+                    cfg.grid.board_h = std::clamp(cfg.grid.board_h + 1, 5, 60);
+                    return cfg.grid.board_h != before;
+                });
+            }
             break;
         case 2:  // tile_size
-            if (left_pressed) adjust_int(data.grid.tile_size, -2, 8, 128, "grid.tile_size", true, [&]() { ApplyImmediateSettings(pending_config_.Data()); });
-            if (right_pressed) adjust_int(data.grid.tile_size, 2, 8, 128, "grid.tile_size", true, [&]() { ApplyImmediateSettings(pending_config_.Data()); });
+            if (left_pressed) {
+                commit_immediate("grid.tile_size",
+                                 [](snake::io::ConfigData& cfg) {
+                                     const int before = cfg.grid.tile_size;
+                                     cfg.grid.tile_size = std::clamp(cfg.grid.tile_size - 2, 8, 128);
+                                     return cfg.grid.tile_size != before;
+                                 });
+            }
+            if (right_pressed) {
+                commit_immediate("grid.tile_size",
+                                 [](snake::io::ConfigData& cfg) {
+                                     const int before = cfg.grid.tile_size;
+                                     cfg.grid.tile_size = std::clamp(cfg.grid.tile_size + 2, 8, 128);
+                                     return cfg.grid.tile_size != before;
+                                 });
+            }
             break;
         case 3:  // wrap_mode
             if (confirm_pressed) {
-                data.grid.wrap_mode = !data.grid.wrap_mode;
-                persist();
-                apply_next_round();
-                NotifySettingChanged("grid.wrap_mode");
+                commit_on_restart("grid.wrap_mode", [](snake::io::ConfigData& cfg) {
+                    const bool before = cfg.grid.wrap_mode;
+                    cfg.grid.wrap_mode = !cfg.grid.wrap_mode;
+                    return cfg.grid.wrap_mode != before;
+                });
             }
             break;
         case 4:  // window.width
-            if (left_pressed) adjust_int(data.window.width, -16, 320, 3840, "window.width", true, [&]() { ApplyImmediateSettings(pending_config_.Data()); });
-            if (right_pressed) adjust_int(data.window.width, 16, 320, 3840, "window.width", true, [&]() { ApplyImmediateSettings(pending_config_.Data()); });
+            if (left_pressed) {
+                commit_immediate("window.width",
+                                 [](snake::io::ConfigData& cfg) {
+                                     const int before = cfg.window.width;
+                                     cfg.window.width = std::clamp(cfg.window.width - 16, 320, 3840);
+                                     return cfg.window.width != before;
+                                 },
+                                 [&](const snake::io::ConfigData& prev, const snake::io::ConfigData& cur) {
+                                     return ApplyImmediateSettings(prev, cur);
+                                 });
+            }
+            if (right_pressed) {
+                commit_immediate("window.width",
+                                 [](snake::io::ConfigData& cfg) {
+                                     const int before = cfg.window.width;
+                                     cfg.window.width = std::clamp(cfg.window.width + 16, 320, 3840);
+                                     return cfg.window.width != before;
+                                 },
+                                 [&](const snake::io::ConfigData& prev, const snake::io::ConfigData& cur) {
+                                     return ApplyImmediateSettings(prev, cur);
+                                 });
+            }
             break;
         case 5:  // window.height
-            if (left_pressed) adjust_int(data.window.height, -16, 320, 3840, "window.height", true, [&]() { ApplyImmediateSettings(pending_config_.Data()); });
-            if (right_pressed) adjust_int(data.window.height, 16, 320, 3840, "window.height", true, [&]() { ApplyImmediateSettings(pending_config_.Data()); });
+            if (left_pressed) {
+                commit_immediate("window.height",
+                                 [](snake::io::ConfigData& cfg) {
+                                     const int before = cfg.window.height;
+                                     cfg.window.height = std::clamp(cfg.window.height - 16, 320, 3840);
+                                     return cfg.window.height != before;
+                                 },
+                                 [&](const snake::io::ConfigData& prev, const snake::io::ConfigData& cur) {
+                                     return ApplyImmediateSettings(prev, cur);
+                                 });
+            }
+            if (right_pressed) {
+                commit_immediate("window.height",
+                                 [](snake::io::ConfigData& cfg) {
+                                     const int before = cfg.window.height;
+                                     cfg.window.height = std::clamp(cfg.window.height + 16, 320, 3840);
+                                     return cfg.window.height != before;
+                                 },
+                                 [&](const snake::io::ConfigData& prev, const snake::io::ConfigData& cur) {
+                                     return ApplyImmediateSettings(prev, cur);
+                                 });
+            }
             break;
         case 6:  // fullscreen
             if (confirm_pressed) {
-                data.window.fullscreen_desktop = !data.window.fullscreen_desktop;
-                notify_and_apply("window.fullscreen_desktop", [&]() { ApplyImmediateSettings(pending_config_.Data()); }, false);
+                commit_immediate("window.fullscreen_desktop",
+                                 [](snake::io::ConfigData& cfg) {
+                                     const bool before = cfg.window.fullscreen_desktop;
+                                     cfg.window.fullscreen_desktop = !cfg.window.fullscreen_desktop;
+                                     return cfg.window.fullscreen_desktop != before;
+                                 },
+                                 [&](const snake::io::ConfigData& prev, const snake::io::ConfigData& cur) {
+                                     return ApplyImmediateSettings(prev, cur);
+                                 });
             }
             break;
         case 7:  // vsync
             if (confirm_pressed) {
-                data.window.vsync = !data.window.vsync;
-                notify_and_apply("window.vsync", [&]() { ApplyImmediateSettings(pending_config_.Data()); }, false);
+                commit_immediate("window.vsync",
+                                 [](snake::io::ConfigData& cfg) {
+                                     const bool before = cfg.window.vsync;
+                                     cfg.window.vsync = !cfg.window.vsync;
+                                     return cfg.window.vsync != before;
+                                 },
+                                 [&](const snake::io::ConfigData& prev, const snake::io::ConfigData& cur) {
+                                     return ApplyImmediateSettings(prev, cur);
+                                 });
             }
             break;
         case 8:  // audio enabled
             if (confirm_pressed) {
-                data.audio.enabled = !data.audio.enabled;
-                notify_and_apply("audio.enabled", [&]() { ApplyAudioSettings(); }, true);
+                commit_immediate("audio.enabled",
+                                 [](snake::io::ConfigData& cfg) {
+                                     const bool before = cfg.audio.enabled;
+                                     cfg.audio.enabled = !cfg.audio.enabled;
+                                     return cfg.audio.enabled != before;
+                                 },
+                                 [&](const snake::io::ConfigData&, const snake::io::ConfigData&) {
+                                     ApplyAudioSettings();
+                                     return true;
+                                 });
             }
             break;
         case 9:  // master volume
-            if (left_pressed) adjust_int(data.audio.master_volume, -8, 0, 128, "audio.master_volume", true, [&]() { ApplyAudioSettings(); }, true);
-            if (right_pressed) adjust_int(data.audio.master_volume, 8, 0, 128, "audio.master_volume", true, [&]() { ApplyAudioSettings(); }, true);
+            if (left_pressed) {
+                commit_immediate("audio.master_volume",
+                                 [](snake::io::ConfigData& cfg) {
+                                     const int before = cfg.audio.master_volume;
+                                     cfg.audio.master_volume = std::clamp(cfg.audio.master_volume - 8, 0, 128);
+                                     return cfg.audio.master_volume != before;
+                                 },
+                                 [&](const snake::io::ConfigData&, const snake::io::ConfigData&) {
+                                     ApplyAudioSettings();
+                                     return true;
+                                 });
+            }
+            if (right_pressed) {
+                commit_immediate("audio.master_volume",
+                                 [](snake::io::ConfigData& cfg) {
+                                     const int before = cfg.audio.master_volume;
+                                     cfg.audio.master_volume = std::clamp(cfg.audio.master_volume + 8, 0, 128);
+                                     return cfg.audio.master_volume != before;
+                                 },
+                                 [&](const snake::io::ConfigData&, const snake::io::ConfigData&) {
+                                     ApplyAudioSettings();
+                                     return true;
+                                 });
+            }
             break;
         case 10:  // sfx volume
-            if (left_pressed) adjust_int(data.audio.sfx_volume, -8, 0, 128, "audio.sfx_volume", true, [&]() { ApplyAudioSettings(); }, true);
-            if (right_pressed) adjust_int(data.audio.sfx_volume, 8, 0, 128, "audio.sfx_volume", true, [&]() { ApplyAudioSettings(); }, true);
+            if (left_pressed) {
+                commit_immediate("audio.sfx_volume",
+                                 [](snake::io::ConfigData& cfg) {
+                                     const int before = cfg.audio.sfx_volume;
+                                     cfg.audio.sfx_volume = std::clamp(cfg.audio.sfx_volume - 8, 0, 128);
+                                     return cfg.audio.sfx_volume != before;
+                                 },
+                                 [&](const snake::io::ConfigData&, const snake::io::ConfigData&) {
+                                     ApplyAudioSettings();
+                                     return true;
+                                 });
+            }
+            if (right_pressed) {
+                commit_immediate("audio.sfx_volume",
+                                 [](snake::io::ConfigData& cfg) {
+                                     const int before = cfg.audio.sfx_volume;
+                                     cfg.audio.sfx_volume = std::clamp(cfg.audio.sfx_volume + 8, 0, 128);
+                                     return cfg.audio.sfx_volume != before;
+                                 },
+                                 [&](const snake::io::ConfigData&, const snake::io::ConfigData&) {
+                                     ApplyAudioSettings();
+                                     return true;
+                                 });
+            }
             break;
         case 11:  // ui.panel_mode
             if (confirm_pressed || left_pressed || right_pressed) {
-                if (left_pressed) {
-                    if (data.ui.panel_mode == "auto") data.ui.panel_mode = "right";
-                    else if (data.ui.panel_mode == "right") data.ui.panel_mode = "top";
-                    else data.ui.panel_mode = "auto";
-                } else {
-                    data.ui.panel_mode = (data.ui.panel_mode == "auto") ? "top" : (data.ui.panel_mode == "top" ? "right" : "auto");
-                }
-                notify_and_apply("ui.panel_mode", {}, true);
+                const int dir = left_pressed ? -1 : 1;
+                commit_immediate("ui.panel_mode",
+                                 [&](snake::io::ConfigData& cfg) {
+                                     std::string next = cfg.ui.panel_mode;
+                                     if (dir < 0) {
+                                         if (next == "auto") next = "right";
+                                         else if (next == "right") next = "top";
+                                         else next = "auto";
+                                     } else {
+                                         next = (next == "auto") ? "top" : (next == "top" ? "right" : "auto");
+                                     }
+                                     const bool changed = next != cfg.ui.panel_mode;
+                                     cfg.ui.panel_mode = next;
+                                     return changed;
+                                 });
             }
             break;
         case 12: if (confirm_pressed || left_pressed || right_pressed) BeginRebind("up", left_pressed ? 0 : (right_pressed ? 1 : 0)); break;
@@ -680,15 +809,18 @@ void App::HandleRebind() {
                                            SDLK_RETURN, SDLK_ESCAPE, SDLK_p, SDLK_r};
     for (auto key : allowed) {
         if (input_.KeyPressed(key)) {
-            if (pending_config_.SetBind(rebind_action_, key, rebind_slot_)) {
-                pending_config_.Sanitize();
-                if (!pending_config_.SaveToFile(config_path_)) {
-                    SDL_Log("Failed to save config after rebinding");
-                }
-                SyncActiveWithPendingPreserveRound();
-                ApplyControlSettings();
-                NotifySettingChanged("keybinds." + rebind_action_);
-            }
+            const std::string action = rebind_action_;
+            const int slot = rebind_slot_;
+            CommitConfigChange(
+                "keybinds." + action,
+                ApplyMode::Immediate,
+                [&](snake::io::ConfigData&) {
+                    return pending_config_.SetBind(action, key, slot);
+                },
+                [&](const snake::io::ConfigData&, const snake::io::ConfigData&) {
+                    ApplyControlSettings();
+                    return true;
+                });
             rebinding_ = false;
             rebind_action_.clear();
             rebind_slot_ = 0;
@@ -697,27 +829,31 @@ void App::HandleRebind() {
     }
 }
 
-void App::ApplyImmediateSettings(const snake::io::ConfigData& cfg) {
-    SDL_SetWindowSize(window_, cfg.window.width, cfg.window.height);
-    if (cfg.window.fullscreen_desktop) {
+bool App::ApplyImmediateSettings(const snake::io::ConfigData& previous,
+                                 const snake::io::ConfigData& current) {
+    SDL_SetWindowSize(window_, current.window.width, current.window.height);
+    if (current.window.fullscreen_desktop) {
         SDL_SetWindowFullscreen(window_, SDL_WINDOW_FULLSCREEN_DESKTOP);
     } else {
         SDL_SetWindowFullscreen(window_, 0);
     }
     SDL_GetWindowSize(window_, &window_w_, &window_h_);
 
-    const bool prev_vsync = active_config_.Data().window.vsync;
-    if (cfg.window.vsync != prev_vsync) {
-        if (!RecreateRenderer(cfg.window.vsync)) {
-            pending_config_.Data().window.vsync = prev_vsync;
-            pending_config_.Sanitize();
-            if (!pending_config_.SaveToFile(config_path_)) {
-                SDL_Log("Failed to save config after reverting VSync");
+    const bool prev_vsync = previous.window.vsync;
+    if (current.window.vsync != prev_vsync) {
+        if (!RecreateRenderer(current.window.vsync)) {
+            SDL_SetWindowSize(window_, previous.window.width, previous.window.height);
+            if (previous.window.fullscreen_desktop) {
+                SDL_SetWindowFullscreen(window_, SDL_WINDOW_FULLSCREEN_DESKTOP);
+            } else {
+                SDL_SetWindowFullscreen(window_, 0);
             }
+            SDL_GetWindowSize(window_, &window_w_, &window_h_);
+            return false;
         }
     }
 
-    SyncActiveWithPendingPreserveRound();
+    return true;
 }
 
 void App::ApplyRoundSettingsOnRestart() {
@@ -826,6 +962,64 @@ void App::NotifySettingChanged(const std::string& key) {
         SDL_Log("on_setting_changed failed: %s", err ? err : "unknown error");
         lua_pop(L, 1);
     }
+}
+
+bool App::CommitConfigChange(
+    const std::string& key_path,
+    ApplyMode mode,
+    const std::function<bool(snake::io::ConfigData&)>& mutate,
+    const std::function<bool(const snake::io::ConfigData&, const snake::io::ConfigData&)>& apply) {
+    const snake::io::ConfigData previous_pending = pending_config_.Data();
+    const snake::io::ConfigData previous_active = active_config_.Data();
+
+    bool changed = true;
+    if (mutate) {
+        changed = mutate(pending_config_.Data());
+    }
+    if (!changed) {
+        pending_config_.Data() = previous_pending;
+        pending_config_.Sanitize();
+        RefreshPendingRoundRestartFlag();
+        return false;
+    }
+
+    pending_config_.Sanitize();
+    if (!pending_config_.SaveToFile(config_path_)) {
+        SDL_Log("Failed to save config to %s", config_path_.string().c_str());
+        config_error_text_ = "Failed to save config.lua";
+        pending_config_.Data() = previous_pending;
+        pending_config_.Sanitize();
+        RefreshPendingRoundRestartFlag();
+        return false;
+    }
+
+    config_error_text_.clear();
+
+    bool apply_ok = true;
+    if (mode == ApplyMode::Immediate) {
+        SyncActiveWithPendingPreserveRound();
+        if (apply) {
+            apply_ok = apply(previous_active, pending_config_.Data());
+        }
+    } else {
+        RefreshPendingRoundRestartFlag();
+    }
+
+    if (!apply_ok) {
+        pending_config_.Data() = previous_pending;
+        pending_config_.Sanitize();
+        if (!pending_config_.SaveToFile(config_path_)) {
+            SDL_Log("Failed to save config after revert to %s", config_path_.string().c_str());
+            config_error_text_ = "Failed to save config.lua";
+        }
+        SyncActiveWithPendingPreserveRound();
+        RefreshPendingRoundRestartFlag();
+        return false;
+    }
+
+    RefreshPendingRoundRestartFlag();
+    NotifySettingChanged(key_path);
+    return true;
 }
 
 void App::SyncActiveWithPendingPreserveRound() {
