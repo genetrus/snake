@@ -3,13 +3,16 @@
 #include <SDL.h>
 
 #include <string>
+#include <vector>
 
 #include "core/Input.h"
 #include "core/Time.h"
 #include "audio/AudioSystem.h"
 #include "game/Game.h"
+#include "game/StateMachine.h"
 #include "lua/LuaRuntime.h"
 #include "io/Config.h"
+#include "io/Highscores.h"
 #include "render/Renderer.h"
 
 namespace snake::core {
@@ -39,6 +42,14 @@ private:
     void RenderFrame();
     void ApplyConfig();
     void InitLua();
+    void HandleMenus(bool& running);
+    void HandleOptionsInput();
+    void ApplyNowVideoSettings();
+    void ApplyAudioSettings();
+    void NotifySettingChanged(const std::string& key);
+    void BeginRebind(const std::string& action);
+    void HandleRebind();
+    void PushUiMessage(std::string msg);
 
     SDL_Window* window_ = nullptr;
     SDL_Renderer* renderer_ = nullptr;
@@ -55,7 +66,18 @@ private:
     snake::game::Game game_;
     snake::audio::AudioSystem audio_;
     snake::lua::LuaRuntime lua_;
+    snake::game::StateMachine sm_;
     snake::io::Config config_;
+    snake::io::Highscores highscores_;
+    std::string ui_message_;
+    std::string lua_reload_error_;
+    bool pending_round_restart_ = false;
+    bool rebinding_ = false;
+    std::string rebind_action_;
+    int menu_index_ = 0;
+    int options_index_ = 0;
+    std::vector<std::string> menu_items_;
+
     snake::render::Renderer renderer_impl_;
     AppLuaContext lua_ctx_{};
     double last_base_ticks_per_sec_ = 10.0;

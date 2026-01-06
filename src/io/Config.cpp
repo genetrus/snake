@@ -19,6 +19,10 @@ constexpr int kMinTilePx = 8;
 constexpr int kMaxTilePx = 128;
 constexpr int kMinWindow = 320;
 constexpr int kMaxWindow = 3840;
+std::string NormalizePanelMode(std::string m) {
+    if (m == "top" || m == "right" || m == "auto") return m;
+    return "auto";
+}
 
 using KeyMap = std::unordered_map<std::string_view, SDL_Keycode>;
 
@@ -241,6 +245,15 @@ bool Config::LoadFromFile(const std::filesystem::path& path) {
     }
     lua_pop(L, 1);
 
+    lua_getfield(L, -1, "ui");
+    if (lua_istable(L, -1)) {
+        std::string mode;
+        if (LoadStringField(L, "panel_mode", &mode)) {
+            data_.ui.panel_mode = mode;
+        }
+    }
+    lua_pop(L, 1);
+
     lua_getfield(L, -1, "keys");
     if (lua_istable(L, -1)) {
         std::string k;
@@ -286,6 +299,7 @@ bool Config::SaveToFile(const std::filesystem::path& path) const {
     ofs << "  grid = { wrap_mode=" << b(data_.game.walls == WallMode::Wrap) << " },\n";
     ofs << "  audio = { enabled=" << b(data_.audio.enabled)
         << ", master_volume=" << data_.audio.master_volume << " },\n";
+    ofs << "  ui = { panel_mode=\"" << EscapeLuaString(data_.ui.panel_mode) << "\" },\n";
     ofs << "  keys = { ";
     ofs << "up=\"" << KeycodeToString(data_.keys.up) << "\", ";
     ofs << "down=\"" << KeycodeToString(data_.keys.down) << "\", ";
@@ -324,6 +338,7 @@ void Config::Sanitize() {
     data_.video.window_h = clamp(data_.video.window_h, kMinWindow, kMaxWindow);
     data_.audio.master_volume = clamp(data_.audio.master_volume, 0, 128);
     data_.player_name = SanitizePlayerName(data_.player_name);
+    data_.ui.panel_mode = NormalizePanelMode(data_.ui.panel_mode);
 
     auto ensure_allowed = [this](SDL_Keycode& key, SDL_Keycode fallback) {
         if (!IsAllowedKey(key)) {
@@ -374,6 +389,11 @@ void Config::SetFullscreenDesktop(bool on) {
 
 void Config::SetMasterVolume(int v) {
     data_.audio.master_volume = v;
+    Sanitize();
+}
+
+void Config::SetPanelMode(std::string m) {
+    data_.ui.panel_mode = std::move(m);
     Sanitize();
 }
 

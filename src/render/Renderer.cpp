@@ -149,7 +149,8 @@ void Renderer::RenderFrame(SDL_Renderer* r,
                            const RenderSettings& rs,
                            const snake::game::Game& game,
                            double now_seconds,
-                           const std::string& overlay_error_text) {
+                           const std::string& overlay_error_text,
+                           const snake::render::UiFrameData& ui_frame) {
     if (r == nullptr) {
         return;
     }
@@ -200,7 +201,13 @@ void Renderer::RenderFrame(SDL_Renderer* r,
     SDL_Point origin{play_rect.x, play_rect.y};
 
     SDL_Rect board_rect{origin.x, origin.y, board_w * tile_px, board_h * tile_px};
-    RenderFallbackRect(r, board_rect, SDL_Color{32, 32, 42, 255});
+    if (ui_frame.screen == snake::game::Screen::MainMenu ||
+        ui_frame.screen == snake::game::Screen::Options ||
+        ui_frame.screen == snake::game::Screen::Highscores) {
+        RenderFallbackRect(r, SDL_Rect{0, 0, virtual_w, virtual_h}, SDL_Color{8, 8, 12, 255});
+    } else {
+        RenderFallbackRect(r, board_rect, SDL_Color{32, 32, 42, 255});
+    }
 
     SDL_SetRenderDrawColor(r, 48, 48, 58, 255);
     for (int x = 0; x <= board_w; ++x) {
@@ -296,7 +303,7 @@ void Renderer::RenderFrame(SDL_Renderer* r,
     layout.panel_rect = panel_rect;
     layout.panel_on_right = place_right;
 
-    ui_.Render(r, layout, game, now_seconds);
+    ui_.Render(r, layout, game, now_seconds, ui_frame);
 
     if (!overlay_error_text.empty()) {
         const int padding = 8;

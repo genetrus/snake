@@ -44,11 +44,16 @@ struct AudioConfig {
     int master_volume = 96;  // 0..128
 };
 
+struct UIConfig {
+    std::string panel_mode = "auto";
+};
+
 struct ConfigData {
     std::string player_name = "Player";
     VideoConfig video;
     GameConfig game;
     AudioConfig audio;
+    UIConfig ui;
     KeyBinds keys;
 };
 
@@ -74,6 +79,7 @@ public:
     void SetVsync(bool on);
     void SetFullscreenDesktop(bool on);
     void SetMasterVolume(int v);
+    void SetPanelMode(std::string m);
     void SetPlayerName(std::string s);
 
     // Key binding operations (limited allowed set)

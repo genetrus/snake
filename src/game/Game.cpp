@@ -8,12 +8,8 @@
 namespace snake::game {
 
 void Game::ResetAll() {
-    sm_.ResetToMenu();
-    ResetRound();
-}
-
-void Game::ResetRound() {
     last_game_over_reason_ = "unknown";
+    game_over_ = false;
     std::random_device rd;
     rng_.seed(rd());
     snake_.Reset(board_);
@@ -24,11 +20,14 @@ void Game::ResetRound() {
     spawner_.EnsureFood(board_, snake_, rng_);
 }
 
+void Game::ResetRound() {
+    ResetAll();
+}
+
 void Game::Tick(double tick_dt) {
-    if (sm_.Current() != GameState::Playing) {
+    if (game_over_) {
         return;
     }
-
     tick_events_ = {};
     effects_.Update(tick_dt);
 
@@ -75,71 +74,22 @@ void Game::Tick(double tick_dt) {
 }
 
 void Game::HandleInput(const snake::core::Input& input) {
-    const auto state = sm_.Current();
-
-    const auto handle_direction = [this, &input]() {
-        if (input.KeyPressed(controls_.up)) {
-            snake_.SetDirection(Dir::Up);
-        } else if (input.KeyPressed(controls_.down)) {
-            snake_.SetDirection(Dir::Down);
-        } else if (input.KeyPressed(controls_.left)) {
-            snake_.SetDirection(Dir::Left);
-        } else if (input.KeyPressed(controls_.right)) {
-            snake_.SetDirection(Dir::Right);
-        }
-    };
-
-    switch (state) {
-        case GameState::Menu:
-            if (input.KeyPressed(controls_.confirm)) {
-                ResetRound();
-                sm_.StartGame();
-            }
-            break;
-        case GameState::Playing:
-            if (input.KeyPressed(controls_.pause)) {
-                sm_.Pause();
-            }
-            if (input.KeyPressed(controls_.menu)) {
-                sm_.BackToMenu();
-                ResetRound();
-            }
-            handle_direction();
-            break;
-        case GameState::Paused:
-            if (input.KeyPressed(controls_.pause)) {
-                sm_.Resume();
-            }
-            if (input.KeyPressed(controls_.restart)) {
-                ResetRound();
-                sm_.Resume();
-            }
-            if (input.KeyPressed(controls_.menu)) {
-                sm_.BackToMenu();
-                ResetRound();
-            }
-            break;
-        case GameState::GameOver:
-            if (input.KeyPressed(controls_.restart)) {
-                ResetRound();
-                sm_.Restart();
-            }
-            if (input.KeyPressed(controls_.menu)) {
-                sm_.BackToMenu();
-                ResetRound();
-            }
-            break;
-        default:
-            break;
+    if (game_over_) {
+        return;
+    }
+    if (input.KeyPressed(controls_.up)) {
+        snake_.SetDirection(Dir::Up);
+    } else if (input.KeyPressed(controls_.down)) {
+        snake_.SetDirection(Dir::Down);
+    } else if (input.KeyPressed(controls_.left)) {
+        snake_.SetDirection(Dir::Left);
+    } else if (input.KeyPressed(controls_.right)) {
+        snake_.SetDirection(Dir::Right);
     }
 }
 
-GameState Game::State() const {
-    return sm_.Current();
-}
-
 bool Game::IsGameOver() const {
-    return sm_.Current() == GameState::GameOver;
+    return game_over_;
 }
 
 std::string_view Game::GameOverReason() const {
@@ -218,7 +168,7 @@ Pos Game::NextHeadPos() const {
 
 void Game::SetGameOver(std::string reason) {
     last_game_over_reason_ = std::move(reason);
-    sm_.GameOver();
+    game_over_ = true;
 }
 
 }  // namespace snake::game

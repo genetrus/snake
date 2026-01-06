@@ -6,7 +6,6 @@
 #include "game/ScoreSystem.h"
 #include "game/Snake.h"
 #include "game/Spawner.h"
-#include "game/StateMachine.h"
 
 #include <random>
 #include <string>
@@ -32,11 +31,10 @@ public:
         SDL_Keycode confirm = SDLK_RETURN;
     };
 
-    void ResetAll();   // menu + reset round data
+    void ResetAll();   // reset round data
     void ResetRound(); // reset snake/spawns/score/effects but keep board
     void Tick(double tick_dt);
     void HandleInput(const snake::core::Input& input);
-    GameState State() const;
     bool IsGameOver() const;
     std::string_view GameOverReason() const;
 
@@ -60,7 +58,6 @@ private:
     Spawner spawner_;
     ScoreSystem score_;
     Effects effects_;
-    StateMachine sm_;
     TickEvents tick_events_;
 
     std::mt19937 rng_;
@@ -72,6 +69,7 @@ private:
     Controls controls_;
 
     std::string last_game_over_reason_ = "unknown";
+    bool game_over_ = false;
 
     Pos NextHeadPos() const;
     void SetGameOver(std::string reason);

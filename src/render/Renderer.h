@@ -28,7 +28,8 @@ public:
                      const RenderSettings& rs,
                      const snake::game::Game& game,
                      double now_seconds,
-                     const std::string& overlay_error_text);
+                     const std::string& overlay_error_text,
+                     const snake::render::UiFrameData& ui_frame);
 
 private:
     bool EnsureFramebuffer(SDL_Renderer* r, int virtual_w, int virtual_h);

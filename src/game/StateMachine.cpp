@@ -2,46 +2,48 @@
 
 namespace snake::game {
 
-void StateMachine::ResetToMenu() {
-    state_ = GameState::Menu;
+Screen StateMachine::Current() const {
+  return screen_;
 }
 
-GameState StateMachine::Current() const {
-    return state_;
+void StateMachine::Set(Screen s) {
+  screen_ = s;
+}
+
+bool StateMachine::Is(Screen s) const {
+  return screen_ == s;
 }
 
 void StateMachine::StartGame() {
-    if (state_ == GameState::Menu) {
-        state_ = GameState::Playing;
-    }
+  screen_ = Screen::Playing;
 }
 
-void StateMachine::Pause() {
-    if (state_ == GameState::Playing) {
-        state_ = GameState::Paused;
-    }
+void StateMachine::OpenOptions() {
+  screen_ = Screen::Options;
 }
 
-void StateMachine::Resume() {
-    if (state_ == GameState::Paused) {
-        state_ = GameState::Playing;
-    }
-}
-
-void StateMachine::GameOver() {
-    if (state_ == GameState::Playing || state_ == GameState::Paused) {
-        state_ = GameState::GameOver;
-    }
-}
-
-void StateMachine::Restart() {
-    if (state_ == GameState::GameOver) {
-        state_ = GameState::Playing;
-    }
+void StateMachine::OpenHighscores() {
+  screen_ = Screen::Highscores;
 }
 
 void StateMachine::BackToMenu() {
-    state_ = GameState::Menu;
+  screen_ = Screen::MainMenu;
+}
+
+void StateMachine::Pause() {
+  if (screen_ == Screen::Playing) {
+    screen_ = Screen::Paused;
+  }
+}
+
+void StateMachine::Resume() {
+  if (screen_ == Screen::Paused) {
+    screen_ = Screen::Playing;
+  }
+}
+
+void StateMachine::GameOver() {
+  screen_ = Screen::GameOver;
 }
 
 }  // namespace snake::game
