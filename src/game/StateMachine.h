@@ -2,21 +2,31 @@
 
 namespace snake::game {
 
-enum class GameState { Menu, Playing, Paused, GameOver };
+enum class Screen {
+  MainMenu,
+  Options,
+  Highscores,
+  Playing,
+  Paused,    // overlay on top of Playing, but keep as separate screen for simplicity
+  GameOver
+};
 
 class StateMachine {
 public:
-    void ResetToMenu();
-    GameState Current() const;
+  Screen Current() const;
+  void Set(Screen s);
+  bool Is(Screen s) const;
 
-    void StartGame();  // Menu -> Playing and reset round
-    void Pause();      // Playing -> Paused
-    void Resume();     // Paused -> Playing
-    void GameOver();   // Playing/Paused -> GameOver
-    void Restart();    // GameOver -> Playing and reset round
-    void BackToMenu(); // any -> Menu
-
+  // For transitions
+  void StartGame();      // -> Playing (also triggers round start/reset)
+  void OpenOptions();    // -> Options
+  void OpenHighscores(); // -> Highscores
+  void BackToMenu();     // -> MainMenu
+  void Pause();          // -> Paused (only from Playing)
+  void Resume();         // -> Playing (only from Paused)
+  void GameOver();       // -> GameOver
 private:
-    GameState state_ = GameState::Menu;
+  Screen screen_ = Screen::MainMenu;
 };
-}  // namespace snake::game
+
+} // namespace snake::game

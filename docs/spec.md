@@ -178,6 +178,13 @@ Lua задаёт/обрабатывает:
 - `on_game_over(ctx, reason)`
 - `on_setting_changed(ctx, key, value)`
 
+### State machine / Screens
+- Экранов шесть: **MainMenu**, **Options**, **Highscores**, **Playing**, **Paused** (оверлей), **GameOver**.
+- Переходы: Start в меню запускает Playing; Options/Highscores выходят в меню по Esc; в Playing клавиша **P** ставит игру на паузу (**Paused**), повторное **P** возвращает; **Esc** из Playing/Paused ведёт в меню; столкновение переводит в GameOver; на GameOver **Enter/R** рестартят раунд и возвращают в Playing, **Esc** — в меню.
+- Тики игрового мира идут **только в Playing**; Paused рисует оверлей без тиков.
+- Настройки, требующие рестарта раунда (board size / wrap), применяются при рестарте (R/Enter) после отметки pending.
+- При входе в GameOver текущий счёт добавляется в таблицу рекордов и сохраняется; экран Highscores показывает сохранённые записи.
+
 ## 14. Hot reload Lua
 - Клавиша: **F5**
 - Работает **везде** (в меню, в игре, в паузе, в Game Over).
