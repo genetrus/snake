@@ -12,7 +12,9 @@ namespace snake::render {
 struct Layout {
     int window_w = 800;
     int window_h = 800;
-    int panel_h = 96;        // top bar height
+    int panel_h = 96;  // top bar height (legacy; prefer panel_rect.h)
+    SDL_Rect panel_rect{0, 0, 800, 96};
+    bool panel_on_right = false;
     int padding = 12;
     int line_gap = 6;
 };

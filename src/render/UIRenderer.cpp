@@ -18,12 +18,12 @@ void UIRenderer::SetFont(const Font* font) {
 }
 
 void UIRenderer::Render(SDL_Renderer* r, const Layout& l, const snake::game::Game& game, double /*now_seconds*/) {
-    SDL_Rect panel_rect{0, 0, l.window_w, l.panel_h};
+    SDL_Rect panel_rect = l.panel_rect;
     SDL_SetRenderDrawColor(r, 24, 24, 32, 255);
     SDL_RenderFillRect(r, &panel_rect);
 
-    int cursor_x = l.padding;
-    int cursor_y = l.padding;
+    int cursor_x = panel_rect.x + l.padding;
+    int cursor_y = panel_rect.y + l.padding;
 
     // State + Score
     std::ostringstream top_line;

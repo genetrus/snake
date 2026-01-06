@@ -1,6 +1,8 @@
 #include "core/App.h"
 
 #include <SDL.h>
+#include <SDL_image.h>
+#include <SDL_ttf.h>
 
 #include <stdexcept>
 
@@ -26,6 +28,7 @@ int App::Run() {
     try {
         InitSDL();
         CreateWindowAndRenderer();
+        renderer_.Init(sdl_renderer_);
         time_.Init();
         lua_ctx_.game = &game_;
         lua_ctx_.audio = &audio_;
@@ -151,6 +154,13 @@ void App::InitSDL() {
         throw std::runtime_error(SDL_GetError());
     }
     sdl_initialized_ = true;
+
+    if ((IMG_Init(IMG_INIT_PNG) & IMG_INIT_PNG) == 0) {
+        SDL_Log("IMG_Init failed: %s", IMG_GetError());
+    }
+    if (TTF_Init() != 0) {
+        SDL_Log("TTF_Init failed: %s", TTF_GetError());
+    }
 }
 
 void App::CreateWindowAndRenderer() {
@@ -169,8 +179,8 @@ void App::CreateWindowAndRenderer() {
         throw std::runtime_error(SDL_GetError());
     }
 
-    renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_ACCELERATED);
-    if (renderer_ == nullptr) {
+    sdl_renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_ACCELERATED);
+    if (sdl_renderer_ == nullptr) {
         SDL_DestroyWindow(window_);
         window_ = nullptr;
         throw std::runtime_error(SDL_GetError());
@@ -181,10 +191,11 @@ void App::CreateWindowAndRenderer() {
 
 void App::ShutdownSDL() {
     audio_.Shutdown();
+    renderer_.Shutdown();
 
-    if (renderer_ != nullptr) {
-        SDL_DestroyRenderer(renderer_);
-        renderer_ = nullptr;
+    if (sdl_renderer_ != nullptr) {
+        SDL_DestroyRenderer(sdl_renderer_);
+        sdl_renderer_ = nullptr;
     }
 
     if (window_ != nullptr) {
@@ -193,15 +204,32 @@ void App::ShutdownSDL() {
     }
 
     if (sdl_initialized_) {
+        TTF_Quit();
+        IMG_Quit();
         SDL_Quit();
         sdl_initialized_ = false;
     }
 }
 
 void App::RenderFrame() {
-    SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);
-    SDL_RenderClear(renderer_);
-    SDL_RenderPresent(renderer_);
+    if (sdl_renderer_ == nullptr) {
+        return;
+    }
+
+    int window_w = 0;
+    int window_h = 0;
+    SDL_GetWindowSize(window_, &window_w, &window_h);
+
+    snake::render::RenderSettings rs{};
+    rs.tile_px = config_.Data().video.tile_px > 0 ? config_.Data().video.tile_px : 32;
+    rs.panel_mode = "auto";
+
+    std::string overlay_error_text;
+    if (const auto& err = lua_.LastError()) {
+        overlay_error_text = err->message;
+    }
+
+    renderer_.RenderFrame(sdl_renderer_, window_w, window_h, rs, game_, time_.Now(), overlay_error_text);
 }
 
 void App::ApplyConfig() {
