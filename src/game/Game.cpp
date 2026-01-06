@@ -58,14 +58,14 @@ void Game::Tick(double tick_dt) {
     snake_.Step(next, ate_food);
 
     if (ate_food) {
-        score_.AddFood(10);
+        score_.AddFood(food_score_);
         spawner_.ConsumeFood();
         spawner_.EnsureFood(board_, snake_);
     }
 
     if (got_bonus_score || got_bonus_slow) {
         if (got_bonus_score) {
-            score_.AddBonusScore();
+            score_.AddBonusScore(bonus_score_);
         }
         if (got_bonus_slow) {
             effects_.ApplySlow();
@@ -80,53 +80,53 @@ void Game::HandleInput(const snake::core::Input& input) {
     const auto state = sm_.Current();
 
     const auto handle_direction = [this, &input]() {
-        if (input.KeyPressed(SDLK_UP) || input.KeyPressed(SDLK_w)) {
+        if (input.KeyPressed(controls_.up)) {
             snake_.SetDirection(Dir::Up);
-        } else if (input.KeyPressed(SDLK_DOWN) || input.KeyPressed(SDLK_s)) {
+        } else if (input.KeyPressed(controls_.down)) {
             snake_.SetDirection(Dir::Down);
-        } else if (input.KeyPressed(SDLK_LEFT) || input.KeyPressed(SDLK_a)) {
+        } else if (input.KeyPressed(controls_.left)) {
             snake_.SetDirection(Dir::Left);
-        } else if (input.KeyPressed(SDLK_RIGHT) || input.KeyPressed(SDLK_d)) {
+        } else if (input.KeyPressed(controls_.right)) {
             snake_.SetDirection(Dir::Right);
         }
     };
 
     switch (state) {
         case State::Menu:
-            if (input.KeyPressed(SDLK_RETURN)) {
+            if (input.KeyPressed(controls_.confirm)) {
                 ResetRound();
                 sm_.StartGame();
             }
             break;
         case State::Playing:
-            if (input.KeyPressed(SDLK_p)) {
+            if (input.KeyPressed(controls_.pause)) {
                 sm_.Pause();
             }
-            if (input.KeyPressed(SDLK_ESCAPE)) {
+            if (input.KeyPressed(controls_.menu)) {
                 sm_.BackToMenu();
                 ResetRound();
             }
             handle_direction();
             break;
         case State::Paused:
-            if (input.KeyPressed(SDLK_p)) {
+            if (input.KeyPressed(controls_.pause)) {
                 sm_.Resume();
             }
-            if (input.KeyPressed(SDLK_r)) {
+            if (input.KeyPressed(controls_.restart)) {
                 ResetRound();
                 sm_.Resume();
             }
-            if (input.KeyPressed(SDLK_ESCAPE)) {
+            if (input.KeyPressed(controls_.menu)) {
                 sm_.BackToMenu();
                 ResetRound();
             }
             break;
         case State::GameOver:
-            if (input.KeyPressed(SDLK_r)) {
+            if (input.KeyPressed(controls_.restart)) {
                 ResetRound();
                 sm_.Restart();
             }
-            if (input.KeyPressed(SDLK_ESCAPE)) {
+            if (input.KeyPressed(controls_.menu)) {
                 sm_.BackToMenu();
                 ResetRound();
             }
@@ -158,6 +158,32 @@ const ScoreSystem& Game::GetScore() const {
 
 const Effects& Game::GetEffects() const {
     return effects_;
+}
+
+void Game::SetBoardSize(int w, int h) {
+    board_.SetSize(w, h);
+}
+
+void Game::SetWrapMode(bool wrap) {
+    wrap_mode_ = wrap;
+}
+
+void Game::SetFoodScore(int food) {
+    food_score_ = food;
+}
+
+void Game::SetBonusScore(int bonus) {
+    bonus_score_ = bonus;
+}
+
+void Game::SetSlowParams(double multiplier, double duration) {
+    slow_multiplier_ = multiplier;
+    slow_duration_ = duration;
+    effects_.SetSlowParams(multiplier, duration);
+}
+
+void Game::SetControls(const Controls& c) {
+    controls_ = c;
 }
 
 Pos Game::NextHeadPos() const {

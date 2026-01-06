@@ -7,7 +7,7 @@ public:
     void Reset();
     int Score() const;
     void AddFood(int food_score = 10);
-    void AddBonusScore();       // +50
+    void AddBonusScore(int bonus_score = 50);       // +50
     double StepsPerSecond() const;  // placeholder formula
 
 private:

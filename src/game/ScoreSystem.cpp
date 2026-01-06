@@ -14,8 +14,8 @@ void ScoreSystem::AddFood(int food_score) {
     score_ += food_score;
 }
 
-void ScoreSystem::AddBonusScore() {
-    score_ += 50;
+void ScoreSystem::AddBonusScore(int bonus_score) {
+    score_ += bonus_score;
 }
 
 double ScoreSystem::StepsPerSecond() const {
