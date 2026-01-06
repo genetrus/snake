@@ -2,28 +2,9 @@
 
 #include <SDL.h>
 
-#include <filesystem>
-#include <string>
-
-#include "audio/AudioSystem.h"
-#include "audio/SFX.h"
 #include "core/Input.h"
-#include "core/Time.h"
-#include "game/Game.h"
-#include "io/Config.h"
-#include "io/Highscores.h"
-#include "render/Font.h"
-#include "render/SpriteAtlas.h"
-#include "render/UIRenderer.h"
-#include "lua/LuaRuntime.h"
-#include "lua/Bindings.h"
 
 namespace snake::core {
-
-struct AppLuaContext {
-    snake::game::Game* game = nullptr;
-    snake::audio::AudioSystem* audio = nullptr;
-};
 
 class App {
 public:
@@ -31,40 +12,26 @@ public:
     ~App();
     int Run();
 
+    Input& GetInput();
+    const Input& GetInput() const;
+    bool IsFocused() const;
+    SDL_Point GetWindowSize() const;
+    bool WasResizedThisFrame() const;
+
 private:
     void InitSDL();
     void CreateWindowAndRenderer();
     void ShutdownSDL();
-    void LoadUserConfig();
-    void ApplyConfig();
-    void SaveConfig();
-    void LoadHighscores();
-    void PersistHighscores();
-
-    void UpdateTick();
-    void RenderFrame();
 
     SDL_Window* window_ = nullptr;
     SDL_Renderer* renderer_ = nullptr;
+
     int window_w_ = 800;
     int window_h_ = 800;
-
-    Time time_;
-    Input input_;
-    game::Game game_;
-    audio::AudioSystem audio_;
-    audio::SFX sfx_;
-    io::Config config_;
-    io::Highscores highscores_;
-    std::filesystem::path config_path_;
-    std::filesystem::path highscores_path_;
-    AppLuaContext lua_ctx_;
-    snake::lua::LuaRuntime lua_;
-    std::string lua_error_;
-    render::Font ui_font_;
-    render::SpriteAtlas atlas_;
-    render::UIRenderer ui_;
-
+    bool window_resized_ = false;
+    bool is_focused_ = true;
     bool sdl_initialized_ = false;
+
+    Input input_;
 };
 }  // namespace snake::core
