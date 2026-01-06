@@ -27,14 +27,19 @@ App::~App() {
 int App::Run() {
     try {
         InitSDL();
-        CreateWindowAndRenderer();
-        renderer_.Init(sdl_renderer_);
+        const auto config_path = snake::io::UserPath("config.lua");
+        config_.LoadFromFile(config_path);
+
+        window_w_ = config_.Data().video.window_w;
+        window_h_ = config_.Data().video.window_h;
+
+        CreateWindowAndRenderer(config_.Data().video.vsync);
+        renderer_impl_.Init(renderer_);
         time_.Init();
         lua_ctx_.game = &game_;
         lua_ctx_.audio = &audio_;
 
         audio_.Init();
-        config_.LoadFromFile(snake::io::UserPath("config.lua"));
         ApplyConfig();
         InitLua();
 
@@ -73,6 +78,18 @@ int App::Run() {
 
             if (input_.QuitRequested()) {
                 running = false;
+            }
+
+            if (config_.Data().video.vsync != vsync_enabled_) {
+                const bool recreated = RecreateRenderer(config_.Data().video.vsync);
+                if (!recreated) {
+                    config_.Data().video.vsync = vsync_enabled_;
+                    if (!config_.SaveToFile(config_path)) {
+                        SDL_Log("Failed to save reverted config after VSync error");
+                    }
+                } else if (!config_.SaveToFile(config_path)) {
+                    SDL_Log("Failed to persist VSync change to config file");
+                }
             }
 
             time_.UpdateFrame();
@@ -163,7 +180,7 @@ void App::InitSDL() {
     }
 }
 
-void App::CreateWindowAndRenderer() {
+void App::CreateWindowAndRenderer(bool want_vsync) {
     if (window_w_ <= 0) window_w_ = kDefaultWindowW;
     if (window_h_ <= 0) window_h_ = kDefaultWindowH;
 
@@ -179,23 +196,29 @@ void App::CreateWindowAndRenderer() {
         throw std::runtime_error(SDL_GetError());
     }
 
-    sdl_renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_ACCELERATED);
-    if (sdl_renderer_ == nullptr) {
+    Uint32 flags = SDL_RENDERER_ACCELERATED;
+    if (want_vsync) {
+        flags |= SDL_RENDERER_PRESENTVSYNC;
+    }
+
+    renderer_ = SDL_CreateRenderer(window_, -1, flags);
+    if (renderer_ == nullptr) {
         SDL_DestroyWindow(window_);
         window_ = nullptr;
         throw std::runtime_error(SDL_GetError());
     }
 
+    vsync_enabled_ = want_vsync;
     SDL_GetWindowSize(window_, &window_w_, &window_h_);
 }
 
 void App::ShutdownSDL() {
     audio_.Shutdown();
-    renderer_.Shutdown();
+    renderer_impl_.Shutdown();
 
-    if (sdl_renderer_ != nullptr) {
-        SDL_DestroyRenderer(sdl_renderer_);
-        sdl_renderer_ = nullptr;
+    if (renderer_ != nullptr) {
+        SDL_DestroyRenderer(renderer_);
+        renderer_ = nullptr;
     }
 
     if (window_ != nullptr) {
@@ -212,7 +235,7 @@ void App::ShutdownSDL() {
 }
 
 void App::RenderFrame() {
-    if (sdl_renderer_ == nullptr) {
+    if (renderer_ == nullptr) {
         return;
     }
 
@@ -224,12 +247,63 @@ void App::RenderFrame() {
     rs.tile_px = config_.Data().video.tile_px > 0 ? config_.Data().video.tile_px : 32;
     rs.panel_mode = "auto";
 
-    std::string overlay_error_text;
+    std::string overlay_error_text = renderer_error_text_;
     if (const auto& err = lua_.LastError()) {
-        overlay_error_text = err->message;
+        if (!overlay_error_text.empty()) {
+            overlay_error_text.append(" | ");
+        }
+        overlay_error_text.append(err->message);
     }
 
-    renderer_.RenderFrame(sdl_renderer_, window_w, window_h, rs, game_, time_.Now(), overlay_error_text);
+    renderer_impl_.RenderFrame(renderer_, window_w, window_h, rs, game_, time_.Now(), overlay_error_text);
+}
+
+bool App::RecreateRenderer(bool want_vsync) {
+    if (renderer_ == nullptr || window_ == nullptr) {
+        SDL_Log("RecreateRenderer called before window/renderer were initialized");
+        renderer_error_text_ = "Failed to apply VSync setting: renderer not ready";
+        return false;
+    }
+
+    if (want_vsync == vsync_enabled_) {
+        return true;
+    }
+
+    Uint32 flags = SDL_RENDERER_ACCELERATED;
+    if (want_vsync) {
+        flags |= SDL_RENDERER_PRESENTVSYNC;
+    }
+
+    SDL_Renderer* new_renderer = SDL_CreateRenderer(window_, -1, flags);
+    if (new_renderer == nullptr) {
+        const char* err = SDL_GetError();
+        SDL_Log("Failed to recreate renderer: %s", err);
+        renderer_error_text_ = std::string("Failed to apply VSync setting: ") + (err ? err : "unknown error");
+        return false;
+    }
+
+    renderer_impl_.Shutdown();
+
+    if (!renderer_impl_.Init(new_renderer)) {
+        SDL_Log("Failed to initialize render resources after recreating SDL_Renderer");
+        if (!renderer_impl_.Init(renderer_)) {
+            SDL_Log("Failed to restore render resources on previous renderer");
+        }
+        SDL_DestroyRenderer(new_renderer);
+        renderer_error_text_ = "Failed to apply VSync setting: renderer init failed";
+        return false;
+    }
+
+    SDL_Renderer* old_renderer = renderer_;
+    renderer_ = new_renderer;
+    vsync_enabled_ = want_vsync;
+    renderer_error_text_.clear();
+
+    if (old_renderer != nullptr) {
+        SDL_DestroyRenderer(old_renderer);
+    }
+
+    return true;
 }
 
 void App::ApplyConfig() {

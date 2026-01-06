@@ -2,6 +2,8 @@
 
 #include <SDL.h>
 
+#include <string>
+
 #include "core/Input.h"
 #include "core/Time.h"
 #include "audio/AudioSystem.h"
@@ -28,17 +30,19 @@ public:
     bool IsFocused() const;
     SDL_Point GetWindowSize() const;
     bool WasResizedThisFrame() const;
+    bool RecreateRenderer(bool want_vsync);
 
 private:
     void InitSDL();
-    void CreateWindowAndRenderer();
+    void CreateWindowAndRenderer(bool want_vsync);
     void ShutdownSDL();
     void RenderFrame();
     void ApplyConfig();
     void InitLua();
 
     SDL_Window* window_ = nullptr;
-    SDL_Renderer* sdl_renderer_ = nullptr;
+    SDL_Renderer* renderer_ = nullptr;
+    bool vsync_enabled_ = false;
 
     int window_w_ = 800;
     int window_h_ = 800;
@@ -52,8 +56,9 @@ private:
     snake::audio::AudioSystem audio_;
     snake::lua::LuaRuntime lua_;
     snake::io::Config config_;
-    snake::render::Renderer renderer_;
+    snake::render::Renderer renderer_impl_;
     AppLuaContext lua_ctx_{};
     double last_ticks_per_sec_ = 10.0;
+    std::string renderer_error_text_;
 };
 }  // namespace snake::core
