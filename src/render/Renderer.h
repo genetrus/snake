@@ -31,10 +31,17 @@ public:
                      const std::string& overlay_error_text);
 
 private:
+    bool EnsureFramebuffer(SDL_Renderer* r, int virtual_w, int virtual_h);
+    void DestroyFramebuffer();
+
     SpriteAtlas atlas_;
     Font font_;
     UIRenderer ui_;
     Pulse food_pulse_;
+
+    SDL_Texture* framebuffer_ = nullptr;
+    int fb_w_ = 0;
+    int fb_h_ = 0;
 };
 
 }  // namespace snake::render
