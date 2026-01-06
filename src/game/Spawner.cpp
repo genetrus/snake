@@ -1,23 +1,20 @@
 #include "game/Spawner.h"
 
 #include <algorithm>
-#include <stdexcept>
 
 namespace snake::game {
 
-void Spawner::Reset(std::uint32_t seed) {
-    rng_.seed(seed);
-    has_food_ = false;
+void Spawner::Reset() {
+    food_.reset();
     bonuses_.clear();
 }
 
-void Spawner::EnsureFood(const Board& b, const Snake& s) {
-    if (has_food_) {
+void Spawner::EnsureFood(const Board& b, const Snake& s, std::mt19937& rng) {
+    if (food_.has_value()) {
         return;
     }
 
-    food_ = RandomFreeCell(b, s);
-    has_food_ = true;
+    food_ = RandomFreeCell(b, s, rng);
 }
 
 void Spawner::EnsureBonuses(const Board& /*b*/, const Snake& /*s*/) {
@@ -27,8 +24,17 @@ void Spawner::EnsureBonuses(const Board& /*b*/, const Snake& /*s*/) {
     }
 }
 
+void Spawner::RespawnFood(const Board& b, const Snake& s, std::mt19937& rng) {
+    std::optional<Pos> avoid = food_;
+    food_ = RandomFreeCell(b, s, rng, avoid);
+}
+
 Pos Spawner::FoodPos() const {
-    return food_;
+    return food_.value_or(Pos{0, 0});
+}
+
+bool Spawner::HasFood() const {
+    return food_.has_value();
 }
 
 const std::vector<Bonus>& Spawner::Bonuses() const {
@@ -36,7 +42,7 @@ const std::vector<Bonus>& Spawner::Bonuses() const {
 }
 
 void Spawner::ConsumeFood() {
-    has_food_ = false;
+    food_.reset();
 }
 
 void Spawner::ConsumeBonusAt(Pos p) {
@@ -48,7 +54,10 @@ void Spawner::ConsumeBonusAt(Pos p) {
         bonuses_.end());
 }
 
-Pos Spawner::RandomFreeCell(const Board& b, const Snake& s) {
+std::optional<Pos> Spawner::RandomFreeCell(const Board& b,
+                                           const Snake& s,
+                                           std::mt19937& rng,
+                                           std::optional<Pos> avoid) const {
     std::vector<Pos> free_cells;
     free_cells.reserve(static_cast<std::size_t>(b.W() * b.H()));
 
@@ -58,7 +67,7 @@ Pos Spawner::RandomFreeCell(const Board& b, const Snake& s) {
             if (s.Occupies(candidate)) {
                 continue;
             }
-            if (has_food_ && candidate == food_) {
+            if (avoid.has_value() && candidate == *avoid) {
                 continue;
             }
             if (std::any_of(
@@ -72,11 +81,11 @@ Pos Spawner::RandomFreeCell(const Board& b, const Snake& s) {
     }
 
     if (free_cells.empty()) {
-        throw std::runtime_error("No free cell available for spawning");
+        return std::nullopt;
     }
 
     std::uniform_int_distribution<std::size_t> dist(0, free_cells.size() - 1);
-    return free_cells[dist(rng_)];
+    return free_cells[dist(rng)];
 }
 
 }  // namespace snake::game

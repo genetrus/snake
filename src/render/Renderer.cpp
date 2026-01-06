@@ -214,20 +214,22 @@ void Renderer::RenderFrame(SDL_Renderer* r,
 
     SDL_Texture* atlas_tex = atlas_.Texture();
 
-    const snake::game::Pos food_pos = game.GetSpawner().FoodPos();
-    const double food_scale = food_pulse_.Eval(now_seconds);
-    const int food_size = static_cast<int>(tile_px * food_scale);
-    SDL_Rect food_dst = TileRect(origin, tile_px, food_pos, food_size);
-    if (atlas_tex != nullptr) {
-        if (const SDL_Rect* src = atlas_.Get("food")) {
-            SDL_Rect dst = food_dst;
-            dst.w = tile_px;
-            dst.h = tile_px;
-            SDL_RenderCopy(r, atlas_tex, src, &dst);
+    if (game.GetSpawner().HasFood()) {
+        const snake::game::Pos food_pos = game.GetSpawner().FoodPos();
+        const double food_scale = food_pulse_.Eval(now_seconds);
+        const int food_size = static_cast<int>(tile_px * food_scale);
+        SDL_Rect food_dst = TileRect(origin, tile_px, food_pos, food_size);
+        if (atlas_tex != nullptr) {
+            if (const SDL_Rect* src = atlas_.Get("food")) {
+                SDL_Rect dst = food_dst;
+                dst.w = tile_px;
+                dst.h = tile_px;
+                SDL_RenderCopy(r, atlas_tex, src, &dst);
+            }
         }
-    }
-    if (atlas_tex == nullptr || atlas_.Get("food") == nullptr) {
-        RenderFallbackRect(r, food_dst, SDL_Color{200, 80, 80, 255});
+        if (atlas_tex == nullptr || atlas_.Get("food") == nullptr) {
+            RenderFallbackRect(r, food_dst, SDL_Color{200, 80, 80, 255});
+        }
     }
 
     for (const auto& bonus : game.GetSpawner().Bonuses()) {
