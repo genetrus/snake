@@ -122,9 +122,9 @@ int App::Run() {
                 game_.Tick(time_.TickDt());
                 const auto state_after = game_.State();
 
-                if (state_after != snake::game::State::GameOver) {
+                if (state_after != snake::game::GameState::GameOver) {
                     lua_.CallWithCtxIfExists("on_tick_end", &lua_ctx_);
-                } else if (state_before != snake::game::State::GameOver) {
+                } else if (state_before != snake::game::GameState::GameOver) {
                     // no end hook when switched to GameOver during tick
                 }
 

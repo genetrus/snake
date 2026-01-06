@@ -8,6 +8,9 @@
 #include "game/Spawner.h"
 #include "game/StateMachine.h"
 
+#include <string>
+#include <string_view>
+
 namespace snake::game {
 class Game {
 public:
@@ -26,7 +29,9 @@ public:
     void ResetRound(); // reset snake/spawns/score/effects but keep board
     void Tick(double tick_dt);
     void HandleInput(const snake::core::Input& input);
-    State State() const;
+    GameState State() const;
+    bool IsGameOver() const;
+    std::string_view GameOverReason() const;
 
     const Board& GetBoard() const;
     const Snake& GetSnake() const;
@@ -56,7 +61,9 @@ private:
     double slow_duration_ = 6.0;
     Controls controls_;
 
+    std::string last_game_over_reason_ = "unknown";
+
     Pos NextHeadPos() const;
-    Pos ApplyWrap(Pos p) const;
+    void SetGameOver(std::string reason);
 };
 }  // namespace snake::game

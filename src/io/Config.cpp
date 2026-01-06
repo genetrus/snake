@@ -225,6 +225,15 @@ bool Config::LoadFromFile(const std::filesystem::path& path) {
     }
     lua_pop(L, 1);
 
+    lua_getfield(L, -1, "grid");
+    if (lua_istable(L, -1)) {
+        bool wrap_mode = false;
+        if (LoadBoolField(L, "wrap_mode", &wrap_mode)) {
+            data_.game.walls = wrap_mode ? WallMode::Wrap : WallMode::Death;
+        }
+    }
+    lua_pop(L, 1);
+
     lua_getfield(L, -1, "audio");
     if (lua_istable(L, -1)) {
         LoadBoolField(L, "enabled", &data_.audio.enabled);
@@ -274,6 +283,7 @@ bool Config::SaveToFile(const std::filesystem::path& path) const {
         << "\", food_score=" << data_.game.food_score << ", bonus_score=" << data_.game.bonus_score
         << ", slow_multiplier=" << data_.game.slow_multiplier
         << ", slow_duration_sec=" << data_.game.slow_duration_sec << " },\n";
+    ofs << "  grid = { wrap_mode=" << b(data_.game.walls == WallMode::Wrap) << " },\n";
     ofs << "  audio = { enabled=" << b(data_.audio.enabled)
         << ", master_volume=" << data_.audio.master_volume << " },\n";
     ofs << "  keys = { ";

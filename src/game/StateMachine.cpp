@@ -3,45 +3,45 @@
 namespace snake::game {
 
 void StateMachine::ResetToMenu() {
-    state_ = State::Menu;
+    state_ = GameState::Menu;
 }
 
-State StateMachine::Current() const {
+GameState StateMachine::Current() const {
     return state_;
 }
 
 void StateMachine::StartGame() {
-    if (state_ == State::Menu) {
-        state_ = State::Playing;
+    if (state_ == GameState::Menu) {
+        state_ = GameState::Playing;
     }
 }
 
 void StateMachine::Pause() {
-    if (state_ == State::Playing) {
-        state_ = State::Paused;
+    if (state_ == GameState::Playing) {
+        state_ = GameState::Paused;
     }
 }
 
 void StateMachine::Resume() {
-    if (state_ == State::Paused) {
-        state_ = State::Playing;
+    if (state_ == GameState::Paused) {
+        state_ = GameState::Playing;
     }
 }
 
 void StateMachine::GameOver() {
-    if (state_ == State::Playing || state_ == State::Paused) {
-        state_ = State::GameOver;
+    if (state_ == GameState::Playing || state_ == GameState::Paused) {
+        state_ = GameState::GameOver;
     }
 }
 
 void StateMachine::Restart() {
-    if (state_ == State::GameOver) {
-        state_ = State::Playing;
+    if (state_ == GameState::GameOver) {
+        state_ = GameState::Playing;
     }
 }
 
 void StateMachine::BackToMenu() {
-    state_ = State::Menu;
+    state_ = GameState::Menu;
 }
 
 }  // namespace snake::game

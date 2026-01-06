@@ -1,6 +1,7 @@
 #include "game/Game.h"
 
 #include <SDL.h>
+#include <utility>
 
 namespace snake::game {
 
@@ -10,6 +11,7 @@ void Game::ResetAll() {
 }
 
 void Game::ResetRound() {
+    last_game_over_reason_ = "unknown";
     snake_.Reset(board_);
     spawner_.Reset();
     score_.Reset();
@@ -19,7 +21,7 @@ void Game::ResetRound() {
 }
 
 void Game::Tick(double tick_dt) {
-    if (sm_.Current() != State::Playing) {
+    if (sm_.Current() != GameState::Playing) {
         return;
     }
 
@@ -30,14 +32,14 @@ void Game::Tick(double tick_dt) {
 
     Pos next = NextHeadPos();
     if (wrap_mode_) {
-        next = ApplyWrap(next);
+        next = board_.Wrap(next);
     } else if (!board_.InBounds(next)) {
-        sm_.GameOver();
+        SetGameOver("wall_collision");
         return;
     }
 
     if (snake_.WouldCollideSelf(next)) {
-        sm_.GameOver();
+        SetGameOver("self_collision");
         return;
     }
 
@@ -92,13 +94,13 @@ void Game::HandleInput(const snake::core::Input& input) {
     };
 
     switch (state) {
-        case State::Menu:
+        case GameState::Menu:
             if (input.KeyPressed(controls_.confirm)) {
                 ResetRound();
                 sm_.StartGame();
             }
             break;
-        case State::Playing:
+        case GameState::Playing:
             if (input.KeyPressed(controls_.pause)) {
                 sm_.Pause();
             }
@@ -108,7 +110,7 @@ void Game::HandleInput(const snake::core::Input& input) {
             }
             handle_direction();
             break;
-        case State::Paused:
+        case GameState::Paused:
             if (input.KeyPressed(controls_.pause)) {
                 sm_.Resume();
             }
@@ -121,7 +123,7 @@ void Game::HandleInput(const snake::core::Input& input) {
                 ResetRound();
             }
             break;
-        case State::GameOver:
+        case GameState::GameOver:
             if (input.KeyPressed(controls_.restart)) {
                 ResetRound();
                 sm_.Restart();
@@ -136,8 +138,16 @@ void Game::HandleInput(const snake::core::Input& input) {
     }
 }
 
-State Game::State() const {
+GameState Game::State() const {
     return sm_.Current();
+}
+
+bool Game::IsGameOver() const {
+    return sm_.Current() == GameState::GameOver;
+}
+
+std::string_view Game::GameOverReason() const {
+    return last_game_over_reason_;
 }
 
 const Board& Game::GetBoard() const {
@@ -207,19 +217,9 @@ Pos Game::NextHeadPos() const {
     return head;
 }
 
-Pos Game::ApplyWrap(Pos p) const {
-    const int w = board_.W();
-    const int h = board_.H();
-
-    if (w > 0) {
-        while (p.x < 0) p.x += w;
-        while (p.x >= w) p.x -= w;
-    }
-    if (h > 0) {
-        while (p.y < 0) p.y += h;
-        while (p.y >= h) p.y -= h;
-    }
-    return p;
+void Game::SetGameOver(std::string reason) {
+    last_game_over_reason_ = std::move(reason);
+    sm_.GameOver();
 }
 
 }  // namespace snake::game
