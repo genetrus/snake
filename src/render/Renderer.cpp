@@ -236,12 +236,13 @@ void Renderer::RenderFrame(SDL_Renderer* r,
         SDL_Rect dst = TileRect(origin, tile_px, bonus.pos);
         const SDL_Rect* src = nullptr;
         if (atlas_tex != nullptr) {
-            if (bonus.type == "bonus_score") {
-                src = atlas_.Get("bonus_score");
-            } else if (bonus.type == "bonus_slow") {
-                src = atlas_.Get("bonus_slow");
-            } else {
-                src = atlas_.Get(bonus.type);
+            switch (bonus.type) {
+                case snake::game::BonusType::Score:
+                    src = atlas_.Get("bonus_score");
+                    break;
+                case snake::game::BonusType::Slow:
+                    src = atlas_.Get("bonus_slow");
+                    break;
             }
         }
 

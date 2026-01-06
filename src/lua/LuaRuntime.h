@@ -32,6 +32,7 @@ public:
     bool CallVoid(std::string_view fn);
     bool CallWithCtx(std::string_view fn, void* ctx_ptr);
     bool CallWithCtxIfExists(std::string_view fn, void* ctx_ptr);
+    bool CallWithCtxIfExists(std::string_view fn, void* ctx_ptr, std::string_view arg1);
 
     bool HotReload(const std::filesystem::path& rules_path, const std::filesystem::path& config_path);
 

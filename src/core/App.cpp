@@ -126,6 +126,9 @@ int App::Run() {
                 if (events.food_eaten) {
                     lua_.CallWithCtxIfExists("on_food_eaten", &lua_ctx_);
                 }
+                if (events.bonus_picked) {
+                    lua_.CallWithCtxIfExists("on_bonus_picked", &lua_ctx_, events.bonus_type);
+                }
 
                 if (state_after != snake::game::GameState::GameOver) {
                     lua_.CallWithCtxIfExists("on_tick_end", &lua_ctx_);

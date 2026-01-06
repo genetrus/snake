@@ -1,8 +1,9 @@
 #include "game/Game.h"
 
 #include <SDL.h>
-#include <utility>
 #include <random>
+#include <optional>
+#include <utility>
 
 namespace snake::game {
 
@@ -21,7 +22,6 @@ void Game::ResetRound() {
     effects_.Reset();
     tick_events_ = {};
     spawner_.EnsureFood(board_, snake_, rng_);
-    spawner_.EnsureBonuses(board_, snake_);
 }
 
 void Game::Tick(double tick_dt) {
@@ -30,10 +30,9 @@ void Game::Tick(double tick_dt) {
     }
 
     tick_events_ = {};
-    effects_.Tick(tick_dt);
+    effects_.Update(tick_dt);
 
     spawner_.EnsureFood(board_, snake_, rng_);
-    spawner_.EnsureBonuses(board_, snake_);
 
     Pos next = NextHeadPos();
     if (wrap_mode_) {
@@ -50,17 +49,7 @@ void Game::Tick(double tick_dt) {
 
     const bool ate_food = spawner_.HasFood() && (spawner_.FoodPos() == next);
 
-    bool got_bonus_score = false;
-    bool got_bonus_slow = false;
-    for (const auto& bonus : spawner_.Bonuses()) {
-        if (bonus.pos == next) {
-            if (bonus.type == "bonus_score") {
-                got_bonus_score = true;
-            } else if (bonus.type == "bonus_slow") {
-                got_bonus_slow = true;
-            }
-        }
-    }
+    const std::optional<BonusType> bonus_at_next = spawner_.BonusTypeAt(next);
 
     snake_.Step(next, ate_food);
 
@@ -68,19 +57,21 @@ void Game::Tick(double tick_dt) {
         score_.AddFood(food_score_);
         tick_events_.food_eaten = true;
         spawner_.RespawnFood(board_, snake_, rng_);
+        spawner_.MaybeSpawnBonus(board_, snake_, rng_, score_.Score());
     }
 
-    if (got_bonus_score || got_bonus_slow) {
-        if (got_bonus_score) {
+    if (bonus_at_next.has_value()) {
+        if (*bonus_at_next == BonusType::Score) {
             score_.AddBonusScore(bonus_score_);
-        }
-        if (got_bonus_slow) {
-            effects_.ApplySlow();
+            tick_events_.bonus_picked = true;
+            tick_events_.bonus_type = "bonus_score";
+        } else if (*bonus_at_next == BonusType::Slow) {
+            effects_.AddSlow(6.0);
+            tick_events_.bonus_picked = true;
+            tick_events_.bonus_type = "bonus_slow";
         }
         spawner_.ConsumeBonusAt(next);
     }
-
-    spawner_.EnsureBonuses(board_, snake_);
 }
 
 void Game::HandleInput(const snake::core::Input& input) {
@@ -198,7 +189,6 @@ void Game::SetBonusScore(int bonus) {
 void Game::SetSlowParams(double multiplier, double duration) {
     slow_multiplier_ = multiplier;
     slow_duration_ = duration;
-    effects_.SetSlowParams(multiplier, duration);
 }
 
 void Game::SetControls(const Controls& c) {
