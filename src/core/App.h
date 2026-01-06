@@ -4,6 +4,7 @@
 
 #include <string>
 #include <vector>
+#include <filesystem>
 
 #include "core/Input.h"
 #include "core/Time.h"
@@ -44,13 +45,17 @@ private:
     void InitLua();
     void HandleMenus(bool& running);
     void HandleOptionsInput();
-    void ApplyNowVideoSettings();
     void ApplyAudioSettings();
     void ApplyControlSettings();
     void NotifySettingChanged(const std::string& key);
     void BeginRebind(const std::string& action, int slot);
     void HandleRebind();
     void PushUiMessage(std::string msg);
+    void ApplyImmediateSettings(const snake::io::ConfigData& cfg);
+    void ApplyRoundSettingsOnRestart();
+    void SyncActiveWithPendingPreserveRound();
+    bool HasPendingRoundChanges() const;
+    void RefreshPendingRoundRestartFlag();
 
     SDL_Window* window_ = nullptr;
     SDL_Renderer* renderer_ = nullptr;
@@ -68,7 +73,8 @@ private:
     snake::audio::AudioSystem audio_;
     snake::lua::LuaRuntime lua_;
     snake::game::StateMachine sm_;
-    snake::io::Config config_;
+    snake::io::Config pending_config_;
+    snake::io::Config active_config_;
     snake::io::Highscores highscores_;
     std::string ui_message_;
     std::string lua_reload_error_;
@@ -79,6 +85,7 @@ private:
     int menu_index_ = 0;
     int options_index_ = 0;
     std::vector<std::string> menu_items_;
+    std::filesystem::path config_path_;
 
     snake::render::Renderer renderer_impl_;
     AppLuaContext lua_ctx_{};
