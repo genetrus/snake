@@ -31,14 +31,19 @@ public:
 
     bool CallVoid(std::string_view fn);
     bool CallWithCtx(std::string_view fn, void* ctx_ptr);
+    bool CallWithCtxIfExists(std::string_view fn, void* ctx_ptr);
 
     bool HotReload(const std::filesystem::path& rules_path, const std::filesystem::path& config_path);
 
     lua_State* L() const;
 
+    // speed_ticks_per_sec(score, config) -> number (>0)
+    bool GetSpeedTicksPerSec(int score, double* out_ticks_per_sec);
+
 private:
     lua_State* L_ = nullptr;
     std::optional<LuaError> last_error_;
+    std::string last_logged_error_;
 
     bool PCall(int nargs, int nrets, std::string_view where);
     bool LoadFile(const std::filesystem::path& p, std::string_view where);

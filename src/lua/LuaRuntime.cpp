@@ -2,6 +2,8 @@
 
 #include <lua.hpp>
 
+#include <SDL.h>
+
 #include <utility>
 
 #include "lua/Bindings.h"
@@ -102,6 +104,17 @@ bool LuaRuntime::CallWithCtx(std::string_view fn, void* ctx_ptr) {
     return PCall(1, 0, std::string("pcall:").append(fn));
 }
 
+bool LuaRuntime::CallWithCtxIfExists(std::string_view fn, void* ctx_ptr) {
+    if (!IsReady()) return false;
+    lua_getglobal(L_, std::string(fn).c_str());
+    if (!lua_isfunction(L_, -1)) {
+        lua_pop(L_, 1);
+        return true;
+    }
+    lua_pushlightuserdata(L_, ctx_ptr);
+    return PCall(1, 0, std::string("pcall:").append(fn));
+}
+
 bool LuaRuntime::HotReload(const std::filesystem::path& rules_path,
                            const std::filesystem::path& config_path) {
     LuaRuntime tmp;
@@ -128,6 +141,47 @@ bool LuaRuntime::HotReload(const std::filesystem::path& rules_path,
 
 lua_State* LuaRuntime::L() const {
     return L_;
+}
+
+bool LuaRuntime::GetSpeedTicksPerSec(int score, double* out_ticks_per_sec) {
+    if (!IsReady() || out_ticks_per_sec == nullptr) {
+        return false;
+    }
+
+    lua_getglobal(L_, "speed_ticks_per_sec");
+    if (!lua_isfunction(L_, -1)) {
+        lua_pop(L_, 1);
+        SetError("speed_ticks_per_sec", "global function missing");
+        return false;
+    }
+
+    lua_pushinteger(L_, score);
+    lua_getglobal(L_, "config");
+    if (lua_isnil(L_, -1)) {
+        // keep nil on stack to pass as second arg
+    }
+
+    if (!PCall(2, 1, "speed_ticks_per_sec")) {
+        return false;
+    }
+
+    if (!lua_isnumber(L_, -1)) {
+        lua_pop(L_, 1);
+        SetError("speed_ticks_per_sec", "expected number return");
+        return false;
+    }
+
+    const double tps = lua_tonumber(L_, -1);
+    lua_pop(L_, 1);
+
+    if (tps <= 0.0) {
+        SetError("speed_ticks_per_sec", "returned non-positive speed");
+        return false;
+    }
+
+    *out_ticks_per_sec = tps;
+    last_error_.reset();
+    return true;
 }
 
 bool LuaRuntime::PCall(int nargs, int nrets, std::string_view where) {
@@ -182,6 +236,11 @@ int LuaRuntime::Traceback(lua_State* L) {
 
 void LuaRuntime::SetError(std::string_view where, std::string_view msg) {
     last_error_ = LuaError{std::string(msg), std::string(where)};
+    const std::string combined = std::string(where) + ": " + std::string(msg);
+    if (combined != last_logged_error_) {
+        SDL_Log("Lua error (%s): %s", std::string(where).c_str(), std::string(msg).c_str());
+        last_logged_error_ = combined;
+    }
 }
 
 }  // namespace snake::lua
