@@ -10,50 +10,63 @@ namespace snake::io {
 
 enum class WallMode { Death, Wrap };
 
-struct KeyBinds {
-    SDL_Keycode up = SDLK_UP;
-    SDL_Keycode down = SDLK_DOWN;
-    SDL_Keycode left = SDLK_LEFT;
-    SDL_Keycode right = SDLK_RIGHT;
-    SDL_Keycode pause = SDLK_p;
-    SDL_Keycode restart = SDLK_r;
-    SDL_Keycode menu = SDLK_ESCAPE;
-    SDL_Keycode confirm = SDLK_RETURN;
+struct KeyPair {
+    SDL_Keycode primary = SDLK_UNKNOWN;
+    SDL_Keycode secondary = SDLK_UNKNOWN;
 };
 
-struct VideoConfig {
-    int window_w = 800;
-    int window_h = 800;
-    int tile_px = 32;
+struct KeyBinds {
+    KeyPair up{SDLK_UP, SDLK_w};
+    KeyPair down{SDLK_DOWN, SDLK_s};
+    KeyPair left{SDLK_LEFT, SDLK_a};
+    KeyPair right{SDLK_RIGHT, SDLK_d};
+    KeyPair pause{SDLK_p, SDLK_p};
+    KeyPair restart{SDLK_r, SDLK_r};
+    KeyPair menu{SDLK_ESCAPE, SDLK_ESCAPE};
+    KeyPair confirm{SDLK_RETURN, SDLK_RETURN};
+};
+
+struct WindowConfig {
+    int width = 800;
+    int height = 800;
     bool fullscreen_desktop = false;
     bool vsync = true;
 };
 
-struct GameConfig {
+struct GridConfig {
     int board_w = 20;
     int board_h = 20;
-    WallMode walls = WallMode::Death;
-    int food_score = 10;
-    int bonus_score = 50;
-    double slow_multiplier = 0.70;
-    double slow_duration_sec = 6.0;
+    int tile_size = 32;
+    bool wrap_mode = false;
 };
 
 struct AudioConfig {
     bool enabled = true;
     int master_volume = 96;  // 0..128
+    int sfx_volume = 96;     // 0..128
 };
 
 struct UIConfig {
     std::string panel_mode = "auto";
 };
 
+struct GameplayConfig {
+    int food_score = 10;
+    int bonus_score = 50;
+    double slow_multiplier = 0.70;
+    double slow_duration_sec = 6.0;
+    int max_simultaneous_bonuses = 2;
+    bool always_one_food = true;
+    int bonus_score_score = 50;
+};
+
 struct ConfigData {
     std::string player_name = "Player";
-    VideoConfig video;
-    GameConfig game;
+    WindowConfig window;
+    GridConfig grid;
     AudioConfig audio;
     UIConfig ui;
+    GameplayConfig gameplay;
     KeyBinds keys;
 };
 
@@ -81,11 +94,14 @@ public:
     void SetMasterVolume(int v);
     void SetPanelMode(std::string m);
     void SetPlayerName(std::string s);
+    void SetAudioEnabled(bool enabled);
+    void SetSfxVolume(int v);
 
     // Key binding operations (limited allowed set)
     bool IsAllowedKey(SDL_Keycode k) const;
-    bool SetBind(std::string_view action, SDL_Keycode k);  // "up","down","left","right","pause","restart","menu","confirm"
+    bool SetBind(std::string_view action, SDL_Keycode k, int slot);  // slot: 0 or 1
 
+    static std::string KeycodeToToken(SDL_Keycode key);
 private:
     ConfigData data_{};
 };

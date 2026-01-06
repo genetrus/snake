@@ -6,7 +6,7 @@
 namespace snake::audio {
 
 bool AudioSystem::Init() {
-    enabled_ = false;
+    initialized_ = false;
 
     if (Mix_Init(0) < 0) {
         SDL_Log("Mix_Init failed: %s", Mix_GetError());
@@ -20,7 +20,8 @@ bool AudioSystem::Init() {
     }
 
     Mix_AllocateChannels(16);
-    enabled_ = true;
+    initialized_ = true;
+    audio_enabled_ = true;
     ApplyVolume();
     return true;
 }
@@ -28,11 +29,16 @@ bool AudioSystem::Init() {
 void AudioSystem::Shutdown() {
     Mix_CloseAudio();
     Mix_Quit();
-    enabled_ = false;
+    initialized_ = false;
 }
 
 bool AudioSystem::IsEnabled() const {
-    return enabled_;
+    return initialized_ && audio_enabled_;
+}
+
+void AudioSystem::SetEnabled(bool enabled) {
+    audio_enabled_ = enabled;
+    ApplyVolume();
 }
 
 void AudioSystem::SetMasterVolume(int v) {
@@ -45,11 +51,22 @@ int AudioSystem::MasterVolume() const {
     return master_volume_;
 }
 
+void AudioSystem::SetSfxVolume(int v) {
+    const int clamped = std::clamp(v, 0, 128);
+    sfx_volume_ = clamped;
+    ApplyVolume();
+}
+
+int AudioSystem::SfxVolume() const {
+    return sfx_volume_;
+}
+
 void AudioSystem::ApplyVolume() {
-    if (!enabled_) {
+    if (!initialized_) {
         return;
     }
-    Mix_Volume(-1, master_volume_);
+    const int channel_volume = audio_enabled_ ? master_volume_ : 0;
+    Mix_Volume(-1, channel_volume);
 }
 
 }  // namespace snake::audio

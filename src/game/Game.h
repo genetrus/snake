@@ -20,15 +20,20 @@ public:
         std::string bonus_type;
     };
 
+    struct ActionKeys {
+        SDL_Keycode primary = SDLK_UNKNOWN;
+        SDL_Keycode secondary = SDLK_UNKNOWN;
+    };
+
     struct Controls {
-        SDL_Keycode up = SDLK_UP;
-        SDL_Keycode down = SDLK_DOWN;
-        SDL_Keycode left = SDLK_LEFT;
-        SDL_Keycode right = SDLK_RIGHT;
-        SDL_Keycode pause = SDLK_p;
-        SDL_Keycode restart = SDLK_r;
-        SDL_Keycode menu = SDLK_ESCAPE;
-        SDL_Keycode confirm = SDLK_RETURN;
+        ActionKeys up{SDLK_UP, SDLK_w};
+        ActionKeys down{SDLK_DOWN, SDLK_s};
+        ActionKeys left{SDLK_LEFT, SDLK_a};
+        ActionKeys right{SDLK_RIGHT, SDLK_d};
+        ActionKeys pause{SDLK_p, SDLK_p};
+        ActionKeys restart{SDLK_r, SDLK_r};
+        ActionKeys menu{SDLK_ESCAPE, SDLK_ESCAPE};
+        ActionKeys confirm{SDLK_RETURN, SDLK_RETURN};
     };
 
     void ResetAll();   // reset round data

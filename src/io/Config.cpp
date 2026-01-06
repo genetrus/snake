@@ -19,6 +19,12 @@ constexpr int kMinTilePx = 8;
 constexpr int kMaxTilePx = 128;
 constexpr int kMinWindow = 320;
 constexpr int kMaxWindow = 3840;
+
+const KeyBinds& DefaultKeybinds() {
+    static const KeyBinds kDefaults{};
+    return kDefaults;
+}
+
 std::string NormalizePanelMode(std::string m) {
     if (m == "top" || m == "right" || m == "auto") return m;
     return "auto";
@@ -135,6 +141,40 @@ bool LoadStringField(lua_State* L, const char* key, std::string* out) {
     return is_str;
 }
 
+bool LoadKeyPair(lua_State* L, const char* key, KeyPair* out) {
+    lua_getfield(L, -1, key);
+    const bool is_table = lua_istable(L, -1);
+    const bool is_string = lua_isstring(L, -1);
+    bool loaded = false;
+    SDL_Keycode primary = SDLK_UNKNOWN;
+    SDL_Keycode secondary = SDLK_UNKNOWN;
+
+    if (is_table) {
+        lua_rawgeti(L, -1, 1);
+        if (lua_isstring(L, -1)) {
+            StringToKeycode(lua_tostring(L, -1), &primary);
+        }
+        lua_pop(L, 1);
+        lua_rawgeti(L, -1, 2);
+        if (lua_isstring(L, -1)) {
+            StringToKeycode(lua_tostring(L, -1), &secondary);
+        }
+        lua_pop(L, 1);
+        loaded = true;
+    } else if (is_string) {
+        StringToKeycode(lua_tostring(L, -1), &primary);
+        secondary = primary;
+        loaded = true;
+    }
+
+    lua_pop(L, 1);
+    if (loaded && out) {
+        out->primary = primary;
+        out->secondary = secondary;
+    }
+    return loaded;
+}
+
 }  // namespace
 
 std::string SanitizePlayerName(std::string name) {
@@ -182,6 +222,8 @@ bool Config::LoadFromFile(const std::filesystem::path& path) {
         ok = false;
     }
 
+    ConfigData loaded = data_;
+
     if (ok) {
         if (lua_gettop(L) > 0 && lua_istable(L, -1)) {
             lua_setglobal(L, "config");
@@ -198,50 +240,76 @@ bool Config::LoadFromFile(const std::filesystem::path& path) {
         return false;
     }
 
-    LoadStringField(L, "player_name", &data_.player_name);
+    LoadStringField(L, "player_name", &loaded.player_name);
 
+    // New layout: window
+    lua_getfield(L, -1, "window");
+    if (lua_istable(L, -1)) {
+        LoadIntField(L, "width", &loaded.window.width);
+        LoadIntField(L, "height", &loaded.window.height);
+        LoadBoolField(L, "fullscreen_desktop", &loaded.window.fullscreen_desktop);
+        LoadBoolField(L, "vsync", &loaded.window.vsync);
+    }
+    lua_pop(L, 1);
+
+    // Legacy layout: video
     lua_getfield(L, -1, "video");
     if (lua_istable(L, -1)) {
-        LoadIntField(L, "window_w", &data_.video.window_w);
-        LoadIntField(L, "window_h", &data_.video.window_h);
-        LoadIntField(L, "tile_px", &data_.video.tile_px);
-        LoadBoolField(L, "fullscreen_desktop", &data_.video.fullscreen_desktop);
-        LoadBoolField(L, "vsync", &data_.video.vsync);
+        LoadIntField(L, "window_w", &loaded.window.width);
+        LoadIntField(L, "window_h", &loaded.window.height);
+        LoadIntField(L, "tile_px", &loaded.grid.tile_size);
+        LoadBoolField(L, "fullscreen_desktop", &loaded.window.fullscreen_desktop);
+        LoadBoolField(L, "vsync", &loaded.window.vsync);
     }
     lua_pop(L, 1);
 
-    lua_getfield(L, -1, "game");
-    if (lua_istable(L, -1)) {
-        LoadIntField(L, "board_w", &data_.game.board_w);
-        LoadIntField(L, "board_h", &data_.game.board_h);
-        std::string wall_mode;
-        if (LoadStringField(L, "walls", &wall_mode)) {
-            if (wall_mode == "wrap") {
-                data_.game.walls = WallMode::Wrap;
-            } else {
-                data_.game.walls = WallMode::Death;
-            }
-        }
-        LoadIntField(L, "food_score", &data_.game.food_score);
-        LoadIntField(L, "bonus_score", &data_.game.bonus_score);
-        LoadNumberField(L, "slow_multiplier", &data_.game.slow_multiplier);
-        LoadNumberField(L, "slow_duration_sec", &data_.game.slow_duration_sec);
-    }
-    lua_pop(L, 1);
-
+    // Grid layout
     lua_getfield(L, -1, "grid");
     if (lua_istable(L, -1)) {
-        bool wrap_mode = false;
+        LoadIntField(L, "board_w", &loaded.grid.board_w);
+        LoadIntField(L, "board_h", &loaded.grid.board_h);
+        LoadIntField(L, "tile_size", &loaded.grid.tile_size);
+        bool wrap_mode = loaded.grid.wrap_mode;
         if (LoadBoolField(L, "wrap_mode", &wrap_mode)) {
-            data_.game.walls = wrap_mode ? WallMode::Wrap : WallMode::Death;
+            loaded.grid.wrap_mode = wrap_mode;
         }
+    }
+    lua_pop(L, 1);
+
+    // Legacy game layout
+    lua_getfield(L, -1, "game");
+    if (lua_istable(L, -1)) {
+        LoadIntField(L, "board_w", &loaded.grid.board_w);
+        LoadIntField(L, "board_h", &loaded.grid.board_h);
+        std::string wall_mode;
+        if (LoadStringField(L, "walls", &wall_mode)) {
+            loaded.grid.wrap_mode = (wall_mode == "wrap");
+        }
+        LoadIntField(L, "food_score", &loaded.gameplay.food_score);
+        LoadIntField(L, "bonus_score", &loaded.gameplay.bonus_score);
+        LoadNumberField(L, "slow_multiplier", &loaded.gameplay.slow_multiplier);
+        LoadNumberField(L, "slow_duration_sec", &loaded.gameplay.slow_duration_sec);
+    }
+    lua_pop(L, 1);
+
+    // Gameplay layout
+    lua_getfield(L, -1, "gameplay");
+    if (lua_istable(L, -1)) {
+        LoadIntField(L, "food_score", &loaded.gameplay.food_score);
+        LoadIntField(L, "bonus_score_score", &loaded.gameplay.bonus_score_score);
+        LoadIntField(L, "bonus_score", &loaded.gameplay.bonus_score);
+        LoadNumberField(L, "slow_multiplier", &loaded.gameplay.slow_multiplier);
+        LoadNumberField(L, "slow_duration_sec", &loaded.gameplay.slow_duration_sec);
+        LoadIntField(L, "max_simultaneous_bonuses", &loaded.gameplay.max_simultaneous_bonuses);
+        LoadBoolField(L, "always_one_food", &loaded.gameplay.always_one_food);
     }
     lua_pop(L, 1);
 
     lua_getfield(L, -1, "audio");
     if (lua_istable(L, -1)) {
-        LoadBoolField(L, "enabled", &data_.audio.enabled);
-        LoadIntField(L, "master_volume", &data_.audio.master_volume);
+        LoadBoolField(L, "enabled", &loaded.audio.enabled);
+        LoadIntField(L, "master_volume", &loaded.audio.master_volume);
+        LoadIntField(L, "sfx_volume", &loaded.audio.sfx_volume);
     }
     lua_pop(L, 1);
 
@@ -249,28 +317,52 @@ bool Config::LoadFromFile(const std::filesystem::path& path) {
     if (lua_istable(L, -1)) {
         std::string mode;
         if (LoadStringField(L, "panel_mode", &mode)) {
-            data_.ui.panel_mode = mode;
+            loaded.ui.panel_mode = mode;
         }
     }
     lua_pop(L, 1);
 
+    // Keybinds (new layout)
+    lua_getfield(L, -1, "keybinds");
+    if (lua_istable(L, -1)) {
+        LoadKeyPair(L, "up", &loaded.keys.up);
+        LoadKeyPair(L, "down", &loaded.keys.down);
+        LoadKeyPair(L, "left", &loaded.keys.left);
+        LoadKeyPair(L, "right", &loaded.keys.right);
+        LoadKeyPair(L, "pause", &loaded.keys.pause);
+        LoadKeyPair(L, "restart", &loaded.keys.restart);
+        LoadKeyPair(L, "menu", &loaded.keys.menu);
+        LoadKeyPair(L, "confirm", &loaded.keys.confirm);
+    }
+    lua_pop(L, 1);
+
+    // Legacy: single-key table
     lua_getfield(L, -1, "keys");
     if (lua_istable(L, -1)) {
         std::string k;
-        if (LoadStringField(L, "up", &k)) StringToKeycode(k, &data_.keys.up);
-        if (LoadStringField(L, "down", &k)) StringToKeycode(k, &data_.keys.down);
-        if (LoadStringField(L, "left", &k)) StringToKeycode(k, &data_.keys.left);
-        if (LoadStringField(L, "right", &k)) StringToKeycode(k, &data_.keys.right);
-        if (LoadStringField(L, "pause", &k)) StringToKeycode(k, &data_.keys.pause);
-        if (LoadStringField(L, "restart", &k)) StringToKeycode(k, &data_.keys.restart);
-        if (LoadStringField(L, "menu", &k)) StringToKeycode(k, &data_.keys.menu);
-        if (LoadStringField(L, "confirm", &k)) StringToKeycode(k, &data_.keys.confirm);
+        if (LoadStringField(L, "up", &k)) StringToKeycode(k, &loaded.keys.up.primary);
+        if (LoadStringField(L, "down", &k)) StringToKeycode(k, &loaded.keys.down.primary);
+        if (LoadStringField(L, "left", &k)) StringToKeycode(k, &loaded.keys.left.primary);
+        if (LoadStringField(L, "right", &k)) StringToKeycode(k, &loaded.keys.right.primary);
+        if (LoadStringField(L, "pause", &k)) StringToKeycode(k, &loaded.keys.pause.primary);
+        if (LoadStringField(L, "restart", &k)) StringToKeycode(k, &loaded.keys.restart.primary);
+        if (LoadStringField(L, "menu", &k)) StringToKeycode(k, &loaded.keys.menu.primary);
+        if (LoadStringField(L, "confirm", &k)) StringToKeycode(k, &loaded.keys.confirm.primary);
+        loaded.keys.up.secondary = loaded.keys.up.primary;
+        loaded.keys.down.secondary = loaded.keys.down.primary;
+        loaded.keys.left.secondary = loaded.keys.left.primary;
+        loaded.keys.right.secondary = loaded.keys.right.primary;
+        loaded.keys.pause.secondary = loaded.keys.pause.primary;
+        loaded.keys.restart.secondary = loaded.keys.restart.primary;
+        loaded.keys.menu.secondary = loaded.keys.menu.primary;
+        loaded.keys.confirm.secondary = loaded.keys.confirm.primary;
     }
     lua_pop(L, 1);  // keys
 
     lua_pop(L, 1);  // config
     lua_close(L);
 
+    data_ = loaded;
     Sanitize();
     return ok;
 }
@@ -284,32 +376,41 @@ bool Config::SaveToFile(const std::filesystem::path& path) const {
     }
 
     auto b = [](bool v) { return v ? "true" : "false"; };
+    auto write_keypair = [&](const char* name, const KeyPair& kp) {
+        ofs << "    " << name << " = { \""
+            << KeycodeToString(kp.primary) << "\", \""
+            << KeycodeToString(kp.secondary) << "\" },\n";
+    };
 
     ofs << "return {\n";
     ofs << "  player_name = \"" << EscapeLuaString(data_.player_name) << "\",\n";
-    ofs << "  video = { window_w=" << data_.video.window_w << ", window_h=" << data_.video.window_h
-        << ", tile_px=" << data_.video.tile_px
-        << ", fullscreen_desktop=" << b(data_.video.fullscreen_desktop)
-        << ", vsync=" << b(data_.video.vsync) << " },\n";
-    ofs << "  game = { board_w=" << data_.game.board_w << ", board_h=" << data_.game.board_h
-        << ", walls=\"" << (data_.game.walls == WallMode::Wrap ? "wrap" : "death")
-        << "\", food_score=" << data_.game.food_score << ", bonus_score=" << data_.game.bonus_score
-        << ", slow_multiplier=" << data_.game.slow_multiplier
-        << ", slow_duration_sec=" << data_.game.slow_duration_sec << " },\n";
-    ofs << "  grid = { wrap_mode=" << b(data_.game.walls == WallMode::Wrap) << " },\n";
-    ofs << "  audio = { enabled=" << b(data_.audio.enabled)
-        << ", master_volume=" << data_.audio.master_volume << " },\n";
-    ofs << "  ui = { panel_mode=\"" << EscapeLuaString(data_.ui.panel_mode) << "\" },\n";
-    ofs << "  keys = { ";
-    ofs << "up=\"" << KeycodeToString(data_.keys.up) << "\", ";
-    ofs << "down=\"" << KeycodeToString(data_.keys.down) << "\", ";
-    ofs << "left=\"" << KeycodeToString(data_.keys.left) << "\", ";
-    ofs << "right=\"" << KeycodeToString(data_.keys.right) << "\", ";
-    ofs << "pause=\"" << KeycodeToString(data_.keys.pause) << "\", ";
-    ofs << "restart=\"" << KeycodeToString(data_.keys.restart) << "\", ";
-    ofs << "menu=\"" << KeycodeToString(data_.keys.menu) << "\", ";
-    ofs << "confirm=\"" << KeycodeToString(data_.keys.confirm) << "\"";
-    ofs << " },\n";
+    ofs << "  window = { width = " << data_.window.width << ", height = " << data_.window.height
+        << ", fullscreen_desktop = " << b(data_.window.fullscreen_desktop)
+        << ", vsync = " << b(data_.window.vsync) << " },\n";
+    ofs << "  grid = { board_w = " << data_.grid.board_w << ", board_h = " << data_.grid.board_h
+        << ", tile_size = " << data_.grid.tile_size
+        << ", wrap_mode = " << b(data_.grid.wrap_mode) << " },\n";
+    ofs << "  audio = { enabled = " << b(data_.audio.enabled)
+        << ", master_volume = " << data_.audio.master_volume
+        << ", sfx_volume = " << data_.audio.sfx_volume << " },\n";
+    ofs << "  ui = { panel_mode = \"" << EscapeLuaString(data_.ui.panel_mode) << "\" },\n";
+    ofs << "  keybinds = {\n";
+    write_keypair("up", data_.keys.up);
+    write_keypair("down", data_.keys.down);
+    write_keypair("left", data_.keys.left);
+    write_keypair("right", data_.keys.right);
+    write_keypair("pause", data_.keys.pause);
+    write_keypair("restart", data_.keys.restart);
+    write_keypair("menu", data_.keys.menu);
+    write_keypair("confirm", data_.keys.confirm);
+    ofs << "  },\n";
+    ofs << "  gameplay = { food_score = " << data_.gameplay.food_score
+        << ", bonus_score_score = " << data_.gameplay.bonus_score_score
+        << ", bonus_score = " << data_.gameplay.bonus_score
+        << ", slow_multiplier = " << data_.gameplay.slow_multiplier
+        << ", slow_duration_sec = " << data_.gameplay.slow_duration_sec
+        << ", max_simultaneous_bonuses = " << data_.gameplay.max_simultaneous_bonuses
+        << ", always_one_food = " << b(data_.gameplay.always_one_food) << " },\n";
     ofs << "}\n";
 
     ofs.close();
@@ -331,59 +432,71 @@ bool Config::SaveToFile(const std::filesystem::path& path) const {
 
 void Config::Sanitize() {
     auto clamp = [](int v, int lo, int hi) { return std::clamp(v, lo, hi); };
-    data_.game.board_w = clamp(data_.game.board_w, kMinBoardSize, kMaxBoardSize);
-    data_.game.board_h = clamp(data_.game.board_h, kMinBoardSize, kMaxBoardSize);
-    data_.video.tile_px = clamp(data_.video.tile_px, kMinTilePx, kMaxTilePx);
-    data_.video.window_w = clamp(data_.video.window_w, kMinWindow, kMaxWindow);
-    data_.video.window_h = clamp(data_.video.window_h, kMinWindow, kMaxWindow);
+    data_.grid.board_w = clamp(data_.grid.board_w, kMinBoardSize, kMaxBoardSize);
+    data_.grid.board_h = clamp(data_.grid.board_h, kMinBoardSize, kMaxBoardSize);
+    data_.grid.tile_size = clamp(data_.grid.tile_size, kMinTilePx, kMaxTilePx);
+    data_.window.width = clamp(data_.window.width, kMinWindow, kMaxWindow);
+    data_.window.height = clamp(data_.window.height, kMinWindow, kMaxWindow);
     data_.audio.master_volume = clamp(data_.audio.master_volume, 0, 128);
+    data_.audio.sfx_volume = clamp(data_.audio.sfx_volume, 0, 128);
+    data_.gameplay.bonus_score = std::max(0, data_.gameplay.bonus_score);
+    data_.gameplay.bonus_score_score = std::max(0, data_.gameplay.bonus_score_score);
+    data_.gameplay.food_score = std::max(1, data_.gameplay.food_score);
+    data_.gameplay.max_simultaneous_bonuses = std::max(0, data_.gameplay.max_simultaneous_bonuses);
+    data_.gameplay.slow_multiplier = std::max(0.0, data_.gameplay.slow_multiplier);
+    data_.gameplay.slow_duration_sec = std::max(0.0, data_.gameplay.slow_duration_sec);
     data_.player_name = SanitizePlayerName(data_.player_name);
     data_.ui.panel_mode = NormalizePanelMode(data_.ui.panel_mode);
 
-    auto ensure_allowed = [this](SDL_Keycode& key, SDL_Keycode fallback) {
-        if (!IsAllowedKey(key)) {
-            key = fallback;
-        }
+    const KeyBinds defaults = DefaultKeybinds();
+    auto ensure_pair = [this](KeyPair& kp, const KeyPair& def) {
+        auto ensure_allowed = [this](SDL_Keycode& key, SDL_Keycode fallback) {
+            if (!IsAllowedKey(key)) {
+                key = fallback;
+            }
+        };
+        ensure_allowed(kp.primary, def.primary);
+        ensure_allowed(kp.secondary, def.secondary);
     };
-    ensure_allowed(data_.keys.up, SDLK_UP);
-    ensure_allowed(data_.keys.down, SDLK_DOWN);
-    ensure_allowed(data_.keys.left, SDLK_LEFT);
-    ensure_allowed(data_.keys.right, SDLK_RIGHT);
-    ensure_allowed(data_.keys.pause, SDLK_p);
-    ensure_allowed(data_.keys.restart, SDLK_r);
-    ensure_allowed(data_.keys.menu, SDLK_ESCAPE);
-    ensure_allowed(data_.keys.confirm, SDLK_RETURN);
+    ensure_pair(data_.keys.up, defaults.up);
+    ensure_pair(data_.keys.down, defaults.down);
+    ensure_pair(data_.keys.left, defaults.left);
+    ensure_pair(data_.keys.right, defaults.right);
+    ensure_pair(data_.keys.pause, defaults.pause);
+    ensure_pair(data_.keys.restart, defaults.restart);
+    ensure_pair(data_.keys.menu, defaults.menu);
+    ensure_pair(data_.keys.confirm, defaults.confirm);
 }
 
 void Config::SetWallMode(WallMode m) {
-    data_.game.walls = m;
+    data_.grid.wrap_mode = (m == WallMode::Wrap);
     Sanitize();
 }
 
 void Config::SetBoardSize(int w, int h) {
-    data_.game.board_w = w;
-    data_.game.board_h = h;
+    data_.grid.board_w = w;
+    data_.grid.board_h = h;
     Sanitize();
 }
 
 void Config::SetWindowSize(int w, int h) {
-    data_.video.window_w = w;
-    data_.video.window_h = h;
+    data_.window.width = w;
+    data_.window.height = h;
     Sanitize();
 }
 
 void Config::SetTilePx(int px) {
-    data_.video.tile_px = px;
+    data_.grid.tile_size = px;
     Sanitize();
 }
 
 void Config::SetVsync(bool on) {
-    data_.video.vsync = on;
+    data_.window.vsync = on;
     Sanitize();
 }
 
 void Config::SetFullscreenDesktop(bool on) {
-    data_.video.fullscreen_desktop = on;
+    data_.window.fullscreen_desktop = on;
     Sanitize();
 }
 
@@ -402,6 +515,16 @@ void Config::SetPlayerName(std::string s) {
     Sanitize();
 }
 
+void Config::SetAudioEnabled(bool enabled) {
+    data_.audio.enabled = enabled;
+    Sanitize();
+}
+
+void Config::SetSfxVolume(int v) {
+    data_.audio.sfx_volume = v;
+    Sanitize();
+}
+
 bool Config::IsAllowedKey(SDL_Keycode k) const {
     for (const auto& kv : AllowedKeyMap()) {
         if (kv.second == k) {
@@ -411,12 +534,15 @@ bool Config::IsAllowedKey(SDL_Keycode k) const {
     return false;
 }
 
-bool Config::SetBind(std::string_view action, SDL_Keycode k) {
+bool Config::SetBind(std::string_view action, SDL_Keycode k, int slot) {
+    if (slot != 0 && slot != 1) {
+        return false;
+    }
     if (!IsAllowedKey(k)) {
         return false;
     }
 
-    SDL_Keycode* target = nullptr;
+    KeyPair* target = nullptr;
     if (action == "up") target = &data_.keys.up;
     else if (action == "down") target = &data_.keys.down;
     else if (action == "left") target = &data_.keys.left;
@@ -426,12 +552,22 @@ bool Config::SetBind(std::string_view action, SDL_Keycode k) {
     else if (action == "menu") target = &data_.keys.menu;
     else if (action == "confirm") target = &data_.keys.confirm;
 
-    if (!target) {
+    if (target == nullptr) {
         return false;
     }
-    *target = k;
+
+    if (slot == 0) {
+        target->primary = k;
+    } else {
+        target->secondary = k;
+    }
+
     Sanitize();
     return true;
+}
+
+std::string Config::KeycodeToToken(SDL_Keycode key) {
+    return KeycodeToString(key);
 }
 
 }  // namespace snake::io

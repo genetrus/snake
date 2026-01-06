@@ -77,13 +77,16 @@ void Game::HandleInput(const snake::core::Input& input) {
     if (game_over_) {
         return;
     }
-    if (input.KeyPressed(controls_.up)) {
+    auto pressed = [&](const ActionKeys& keys) {
+        return input.KeyPressed(keys.primary) || input.KeyPressed(keys.secondary);
+    };
+    if (pressed(controls_.up)) {
         snake_.SetDirection(Dir::Up);
-    } else if (input.KeyPressed(controls_.down)) {
+    } else if (pressed(controls_.down)) {
         snake_.SetDirection(Dir::Down);
-    } else if (input.KeyPressed(controls_.left)) {
+    } else if (pressed(controls_.left)) {
         snake_.SetDirection(Dir::Left);
-    } else if (input.KeyPressed(controls_.right)) {
+    } else if (pressed(controls_.right)) {
         snake_.SetDirection(Dir::Right);
     }
 }
