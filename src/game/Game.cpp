@@ -2,6 +2,7 @@
 
 #include <SDL.h>
 #include <utility>
+#include <random>
 
 namespace snake::game {
 
@@ -12,11 +13,14 @@ void Game::ResetAll() {
 
 void Game::ResetRound() {
     last_game_over_reason_ = "unknown";
+    std::random_device rd;
+    rng_.seed(rd());
     snake_.Reset(board_);
     spawner_.Reset();
     score_.Reset();
     effects_.Reset();
-    spawner_.EnsureFood(board_, snake_);
+    tick_events_ = {};
+    spawner_.EnsureFood(board_, snake_, rng_);
     spawner_.EnsureBonuses(board_, snake_);
 }
 
@@ -25,9 +29,10 @@ void Game::Tick(double tick_dt) {
         return;
     }
 
+    tick_events_ = {};
     effects_.Tick(tick_dt);
 
-    spawner_.EnsureFood(board_, snake_);
+    spawner_.EnsureFood(board_, snake_, rng_);
     spawner_.EnsureBonuses(board_, snake_);
 
     Pos next = NextHeadPos();
@@ -43,7 +48,7 @@ void Game::Tick(double tick_dt) {
         return;
     }
 
-    const bool ate_food = (spawner_.FoodPos() == next);
+    const bool ate_food = spawner_.HasFood() && (spawner_.FoodPos() == next);
 
     bool got_bonus_score = false;
     bool got_bonus_slow = false;
@@ -61,8 +66,8 @@ void Game::Tick(double tick_dt) {
 
     if (ate_food) {
         score_.AddFood(food_score_);
-        spawner_.ConsumeFood();
-        spawner_.EnsureFood(board_, snake_);
+        tick_events_.food_eaten = true;
+        spawner_.RespawnFood(board_, snake_, rng_);
     }
 
     if (got_bonus_score || got_bonus_slow) {
@@ -168,6 +173,10 @@ const ScoreSystem& Game::GetScore() const {
 
 const Effects& Game::GetEffects() const {
     return effects_;
+}
+
+const Game::TickEvents& Game::Events() const {
+    return tick_events_;
 }
 
 void Game::SetBoardSize(int w, int h) {

@@ -120,7 +120,12 @@ int App::Run() {
 
                 const auto state_before = game_.State();
                 game_.Tick(time_.TickDt());
+                const auto events = game_.Events();
                 const auto state_after = game_.State();
+
+                if (events.food_eaten) {
+                    lua_.CallWithCtxIfExists("on_food_eaten", &lua_ctx_);
+                }
 
                 if (state_after != snake::game::GameState::GameOver) {
                     lua_.CallWithCtxIfExists("on_tick_end", &lua_ctx_);

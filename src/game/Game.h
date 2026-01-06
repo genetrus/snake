@@ -8,12 +8,17 @@
 #include "game/Spawner.h"
 #include "game/StateMachine.h"
 
+#include <random>
 #include <string>
 #include <string_view>
 
 namespace snake::game {
 class Game {
 public:
+    struct TickEvents {
+        bool food_eaten = false;
+    };
+
     struct Controls {
         SDL_Keycode up = SDLK_UP;
         SDL_Keycode down = SDLK_DOWN;
@@ -38,6 +43,7 @@ public:
     const Spawner& GetSpawner() const;
     const ScoreSystem& GetScore() const;
     const Effects& GetEffects() const;
+    const TickEvents& Events() const;
 
     void SetBoardSize(int w, int h);
     void SetWrapMode(bool wrap);
@@ -53,7 +59,9 @@ private:
     ScoreSystem score_;
     Effects effects_;
     StateMachine sm_;
+    TickEvents tick_events_;
 
+    std::mt19937 rng_;
     bool wrap_mode_ = false;  // walls kill (false) vs wrap (true)
     int food_score_ = 10;
     int bonus_score_ = 50;
