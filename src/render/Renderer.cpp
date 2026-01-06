@@ -5,8 +5,15 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <filesystem>
 #include <string>
+
+#if SDL_VERSION_ATLEAST(2, 0, 12)
+#define SNAKE_HAS_SDL_SCALE_MODE 1
+#else
+#define SNAKE_HAS_SDL_SCALE_MODE 0
+#endif
 
 #include "game/Board.h"
 #include "game/Game.h"
@@ -18,6 +25,29 @@ namespace {
 constexpr int kFallbackTilePx = 32;
 constexpr int kPanelH = 96;
 constexpr int kPanelW = 280;
+
+struct Viewport {
+    SDL_Rect dst{0, 0, 0, 0};
+    double scale = 1.0;
+};
+
+Viewport ComputeLetterboxViewport(int win_w, int win_h, int virtual_w, int virtual_h) {
+    if (virtual_w <= 0 || virtual_h <= 0 || win_w <= 0 || win_h <= 0) {
+        return {};
+    }
+
+    const double scale = std::min(static_cast<double>(win_w) / static_cast<double>(virtual_w),
+                                  static_cast<double>(win_h) / static_cast<double>(virtual_h));
+    const int dst_w = static_cast<int>(std::floor(static_cast<double>(virtual_w) * scale));
+    const int dst_h = static_cast<int>(std::floor(static_cast<double>(virtual_h) * scale));
+    const int dst_x = (win_w - dst_w) / 2;
+    const int dst_y = (win_h - dst_h) / 2;
+
+    Viewport vp;
+    vp.dst = SDL_Rect{dst_x, dst_y, dst_w, dst_h};
+    vp.scale = scale;
+    return vp;
+}
 
 SDL_Rect TileRect(SDL_Point origin, int tile_px, snake::game::Pos p, int size_override = -1) {
     const int size = (size_override > 0) ? size_override : tile_px;
@@ -49,6 +79,46 @@ SDL_Rect ClampRectToNonNegative(const SDL_Rect& rect) {
 
 }  // namespace
 
+bool Renderer::EnsureFramebuffer(SDL_Renderer* r, int virtual_w, int virtual_h) {
+    if (r == nullptr || virtual_w <= 0 || virtual_h <= 0) {
+        return false;
+    }
+
+    if (framebuffer_ != nullptr && fb_w_ == virtual_w && fb_h_ == virtual_h) {
+        return true;
+    }
+
+    DestroyFramebuffer();
+
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");  // nearest as a fallback for older SDL
+
+    SDL_Texture* tex = SDL_CreateTexture(r, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, virtual_w, virtual_h);
+    if (tex == nullptr) {
+        SDL_Log("Failed to create framebuffer: %s", SDL_GetError());
+        return false;
+    }
+
+    SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
+
+#if SNAKE_HAS_SDL_SCALE_MODE
+    SDL_SetTextureScaleMode(tex, SDL_ScaleModeNearest);
+#endif
+
+    framebuffer_ = tex;
+    fb_w_ = virtual_w;
+    fb_h_ = virtual_h;
+    return true;
+}
+
+void Renderer::DestroyFramebuffer() {
+    if (framebuffer_ != nullptr) {
+        SDL_DestroyTexture(framebuffer_);
+        framebuffer_ = nullptr;
+    }
+    fb_w_ = 0;
+    fb_h_ = 0;
+}
+
 bool Renderer::Init(SDL_Renderer* r) {
     bool ok = true;
 
@@ -67,6 +137,7 @@ bool Renderer::Init(SDL_Renderer* r) {
 }
 
 void Renderer::Shutdown() {
+    DestroyFramebuffer();
     font_.Reset();
     atlas_.SetTexture(nullptr);
     ui_.SetFont(nullptr);
@@ -83,30 +154,50 @@ void Renderer::RenderFrame(SDL_Renderer* r,
         return;
     }
 
+    const std::string mode = NormalizePanelMode(rs.panel_mode);
+    bool place_right = (mode == "right");
+    const int tile_px = rs.tile_px > 0 ? rs.tile_px : kFallbackTilePx;
+    const int board_w = game.GetBoard().W();
+    const int board_h = game.GetBoard().H();
+
+    const int board_px_w = board_w * tile_px;
+    const int board_px_h = board_h * tile_px;
+    const int panel_px_h = kPanelH;
+    const int panel_px_w = kPanelW;
+
+    if (mode == "auto") {
+        place_right = window_w >= window_h;
+    }
+
+    if (!place_right && window_w >= window_h + 200) {
+        place_right = true;  // legacy wide preference
+    }
+
+    const int virtual_w = place_right ? board_px_w + panel_px_w : board_px_w;
+    const int virtual_h = place_right ? std::max(board_px_h, panel_px_h) : board_px_h + panel_px_h;
+
+    const bool have_fb = EnsureFramebuffer(r, virtual_w, virtual_h);
+
+    SDL_Texture* target = have_fb ? framebuffer_ : nullptr;
+    SDL_SetRenderTarget(r, target);
+
     SDL_SetRenderDrawColor(r, 4, 4, 6, 255);
     SDL_RenderClear(r);
-
-    const std::string mode = NormalizePanelMode(rs.panel_mode);
-    const bool place_right = (mode == "right") ? true : (mode == "auto" ? window_w >= window_h + 200 : false);
 
     SDL_Rect panel_rect{};
     SDL_Rect play_rect{};
     if (place_right) {
-        const int panel_x = std::max(0, window_w - kPanelW);
-        panel_rect = SDL_Rect{panel_x, 0, std::max(0, window_w - panel_x), std::max(0, window_h)};
-        play_rect = SDL_Rect{0, 0, std::max(0, panel_x), std::max(0, window_h)};
+        panel_rect = SDL_Rect{board_px_w, 0, panel_px_w, std::max(panel_px_h, board_px_h)};
+        play_rect = SDL_Rect{0, 0, board_px_w, board_px_h};
     } else {
-        panel_rect = SDL_Rect{0, 0, std::max(0, window_w), std::max(0, window_h >= kPanelH ? kPanelH : window_h)};
-        play_rect = SDL_Rect{0, panel_rect.h, std::max(0, window_w), std::max(0, window_h - panel_rect.h)};
+        panel_rect = SDL_Rect{0, 0, board_px_w, panel_px_h};
+        play_rect = SDL_Rect{0, panel_px_h, board_px_w, board_px_h};
     }
 
     panel_rect = ClampRectToNonNegative(panel_rect);
     play_rect = ClampRectToNonNegative(play_rect);
 
     SDL_Point origin{play_rect.x, play_rect.y};
-    const int tile_px = rs.tile_px > 0 ? rs.tile_px : kFallbackTilePx;
-    const int board_w = game.GetBoard().W();
-    const int board_h = game.GetBoard().H();
 
     SDL_Rect board_rect{origin.x, origin.y, board_w * tile_px, board_h * tile_px};
     RenderFallbackRect(r, board_rect, SDL_Color{32, 32, 42, 255});
@@ -196,8 +287,8 @@ void Renderer::RenderFrame(SDL_Renderer* r,
     }
 
     Layout layout{};
-    layout.window_w = window_w;
-    layout.window_h = window_h;
+    layout.window_w = virtual_w;
+    layout.window_h = virtual_h;
     layout.panel_h = panel_rect.h;
     layout.panel_rect = panel_rect;
     layout.panel_on_right = place_right;
@@ -219,7 +310,7 @@ void Renderer::RenderFrame(SDL_Renderer* r,
 
         const int bg_w = text_w + padding * 2;
         const int bg_h = text_h + padding * 2;
-        SDL_Rect bg{play_rect.x + padding, std::max(0, window_h - bg_h - padding), bg_w, bg_h};
+        SDL_Rect bg{play_rect.x + padding, std::max(0, virtual_h - bg_h - padding), bg_w, bg_h};
 
         SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
         SDL_SetRenderDrawColor(r, 10, 10, 10, 190);
@@ -236,6 +327,16 @@ void Renderer::RenderFrame(SDL_Renderer* r,
         }
 
         SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
+    }
+
+    SDL_SetRenderTarget(r, nullptr);
+
+    if (have_fb) {
+        SDL_SetRenderDrawColor(r, 0, 0, 0, 255);
+        SDL_RenderClear(r);
+
+        const Viewport vp = ComputeLetterboxViewport(window_w, window_h, virtual_w, virtual_h);
+        SDL_RenderCopy(r, framebuffer_, nullptr, &vp.dst);
     }
 
     SDL_RenderPresent(r);
