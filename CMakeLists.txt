@@ -31,6 +31,7 @@ add_executable(snake
     src/render/Font.cpp
     src/render/SpriteAtlas.cpp
     src/render/UIRenderer.cpp
+    src/render/Renderer.cpp
 )
 
 find_package(SDL2 CONFIG REQUIRED)

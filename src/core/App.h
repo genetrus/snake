@@ -8,6 +8,7 @@
 #include "game/Game.h"
 #include "lua/LuaRuntime.h"
 #include "io/Config.h"
+#include "render/Renderer.h"
 
 namespace snake::core {
 
@@ -37,7 +38,7 @@ private:
     void InitLua();
 
     SDL_Window* window_ = nullptr;
-    SDL_Renderer* renderer_ = nullptr;
+    SDL_Renderer* sdl_renderer_ = nullptr;
 
     int window_w_ = 800;
     int window_h_ = 800;
@@ -51,6 +52,7 @@ private:
     snake::audio::AudioSystem audio_;
     snake::lua::LuaRuntime lua_;
     snake::io::Config config_;
+    snake::render::Renderer renderer_;
     AppLuaContext lua_ctx_{};
     double last_ticks_per_sec_ = 10.0;
 };
