@@ -20,8 +20,10 @@ add_executable(snake
     src/game/Snake.cpp
     src/game/Spawner.cpp
     src/game/StateMachine.cpp
+    src/io/Config.cpp
     src/io/AppData.cpp
     src/io/Bootstrap.cpp
+    src/io/Highscores.cpp
     src/io/Paths.cpp
     src/lua/LuaRuntime.cpp
     src/lua/Bindings.cpp

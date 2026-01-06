@@ -11,6 +11,17 @@
 namespace snake::game {
 class Game {
 public:
+    struct Controls {
+        SDL_Keycode up = SDLK_UP;
+        SDL_Keycode down = SDLK_DOWN;
+        SDL_Keycode left = SDLK_LEFT;
+        SDL_Keycode right = SDLK_RIGHT;
+        SDL_Keycode pause = SDLK_p;
+        SDL_Keycode restart = SDLK_r;
+        SDL_Keycode menu = SDLK_ESCAPE;
+        SDL_Keycode confirm = SDLK_RETURN;
+    };
+
     void ResetAll();   // menu + reset round data
     void ResetRound(); // reset snake/spawns/score/effects but keep board
     void Tick(double tick_dt);
@@ -23,6 +34,13 @@ public:
     const ScoreSystem& GetScore() const;
     const Effects& GetEffects() const;
 
+    void SetBoardSize(int w, int h);
+    void SetWrapMode(bool wrap);
+    void SetFoodScore(int food);
+    void SetBonusScore(int bonus);
+    void SetSlowParams(double multiplier, double duration);
+    void SetControls(const Controls& c);
+
 private:
     Board board_;
     Snake snake_;
@@ -32,6 +50,11 @@ private:
     StateMachine sm_;
 
     bool wrap_mode_ = false;  // walls kill (false) vs wrap (true)
+    int food_score_ = 10;
+    int bonus_score_ = 50;
+    double slow_multiplier_ = 0.70;
+    double slow_duration_ = 6.0;
+    Controls controls_;
 
     Pos NextHeadPos() const;
     Pos ApplyWrap(Pos p) const;

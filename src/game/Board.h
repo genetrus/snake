@@ -9,6 +9,7 @@ public:
     int W() const;
     int H() const;
     bool InBounds(Pos p) const;
+    void SetSize(int w, int h);
 
 private:
     int w_;

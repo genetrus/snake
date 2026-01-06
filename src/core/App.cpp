@@ -9,6 +9,8 @@
 #include <stdexcept>
 #include <string_view>
 
+#include "io/Config.h"
+#include "io/Highscores.h"
 #include "io/Paths.h"
 #include "render/Animation.h"
 #include "lua/Bindings.h"
@@ -17,6 +19,11 @@ namespace snake::core {
 
 App::App() {
     try {
+        config_path_ = snake::io::UserPath("config.lua");
+        highscores_path_ = snake::io::UserPath("highscores.json");
+        LoadUserConfig();
+        LoadHighscores();
+
         InitSDL();
         sdl_initialized_ = true;
         CreateWindowAndRenderer();
@@ -27,6 +34,7 @@ App::App() {
         audio_.Init();
         sfx_.SetAudioSystem(&audio_);
         sfx_.LoadAll("./assets/sounds");
+        ApplyConfig();
 
         const auto font_path = snake::io::AssetsPath("fonts/placeholder.ttf");
         if (std::filesystem::exists(font_path)) {
@@ -134,6 +142,12 @@ int App::Run() {
                 if ((prev_state == snake::game::State::Playing || prev_state == snake::game::State::Paused) &&
                     current_state == snake::game::State::GameOver) {
                     sfx_.Play(audio::SfxId::GameOver);
+                    if (highscores_.TryAdd(
+                            config_.Data().player_name,
+                            current_score,
+                            io::Highscores::NowIsoUtc())) {
+                        PersistHighscores();
+                    }
                 }
                 if (prev_state == snake::game::State::Playing && current_state == snake::game::State::Paused) {
                     sfx_.Play(audio::SfxId::PauseOn);
@@ -183,23 +197,30 @@ void App::InitSDL() {
 }
 
 void App::CreateWindowAndRenderer() {
+    const auto& video = config_.Data().video;
     window_ = SDL_CreateWindow(
         "Snake",
         SDL_WINDOWPOS_CENTERED,
         SDL_WINDOWPOS_CENTERED,
-        800,
-        800,
+        video.window_w,
+        video.window_h,
         SDL_WINDOW_SHOWN);
 
     if (window_ == nullptr) {
         throw std::runtime_error(SDL_GetError());
     }
 
-    renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_ACCELERATED);
+    const Uint32 renderer_flags =
+        SDL_RENDERER_ACCELERATED | (video.vsync ? SDL_RENDERER_PRESENTVSYNC : 0);
+    renderer_ = SDL_CreateRenderer(window_, -1, renderer_flags);
     if (renderer_ == nullptr) {
         SDL_DestroyWindow(window_);
         window_ = nullptr;
         throw std::runtime_error(SDL_GetError());
+    }
+
+    if (video.fullscreen_desktop) {
+        SDL_SetWindowFullscreen(window_, SDL_WINDOW_FULLSCREEN_DESKTOP);
     }
 }
 
@@ -250,7 +271,7 @@ void App::RenderFrame() {
     SDL_RenderFillRect(renderer_, &play_rect);
 
     const auto& board = game_.GetBoard();
-    const int tile_size = 32;
+    const int tile_size = config_.Data().video.tile_px;
     const int board_px_w = board.W() * tile_size;
     const int board_px_h = board.H() * tile_size;
 
@@ -360,6 +381,62 @@ void App::RenderFrame() {
     }
 
     ui_.Render(renderer_, layout, game_, now);
+}
+
+void App::LoadUserConfig() {
+    config_.LoadFromFile(config_path_);
+    config_.Sanitize();
+}
+
+void App::ApplyConfig() {
+    const auto& cfg = config_.Data();
+
+    game_.SetBoardSize(cfg.game.board_w, cfg.game.board_h);
+    game_.SetWrapMode(cfg.game.walls == io::WallMode::Wrap);
+    game_.SetFoodScore(cfg.game.food_score);
+    game_.SetBonusScore(cfg.game.bonus_score);
+    game_.SetSlowParams(cfg.game.slow_multiplier, cfg.game.slow_duration_sec);
+    game::Game::Controls controls{};
+    controls.up = cfg.keys.up;
+    controls.down = cfg.keys.down;
+    controls.left = cfg.keys.left;
+    controls.right = cfg.keys.right;
+    controls.pause = cfg.keys.pause;
+    controls.restart = cfg.keys.restart;
+    controls.menu = cfg.keys.menu;
+    controls.confirm = cfg.keys.confirm;
+    game_.SetControls(controls);
+
+    audio_.SetMasterVolume(cfg.audio.master_volume);
+    if (!cfg.audio.enabled) {
+        audio_.SetMasterVolume(0);
+    }
+
+    if (window_) {
+        SDL_SetWindowSize(window_, cfg.video.window_w, cfg.video.window_h);
+        if (cfg.video.fullscreen_desktop) {
+            SDL_SetWindowFullscreen(window_, SDL_WINDOW_FULLSCREEN_DESKTOP);
+        } else {
+            SDL_SetWindowFullscreen(window_, 0);
+        }
+    }
+    // Renderer vsync is chosen during creation. Recreate renderer if needed when implementing
+    // options UI updates.
+
+    SaveConfig();
+}
+
+void App::SaveConfig() {
+    config_.Sanitize();
+    config_.SaveToFile(config_path_);
+}
+
+void App::LoadHighscores() {
+    highscores_.Load(highscores_path_);
+}
+
+void App::PersistHighscores() {
+    highscores_.Save(highscores_path_);
 }
 
 }  // namespace snake::core

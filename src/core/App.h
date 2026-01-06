@@ -2,6 +2,7 @@
 
 #include <SDL.h>
 
+#include <filesystem>
 #include <string>
 
 #include "audio/AudioSystem.h"
@@ -9,6 +10,8 @@
 #include "core/Input.h"
 #include "core/Time.h"
 #include "game/Game.h"
+#include "io/Config.h"
+#include "io/Highscores.h"
 #include "render/Font.h"
 #include "render/SpriteAtlas.h"
 #include "render/UIRenderer.h"
@@ -32,6 +35,11 @@ private:
     void InitSDL();
     void CreateWindowAndRenderer();
     void ShutdownSDL();
+    void LoadUserConfig();
+    void ApplyConfig();
+    void SaveConfig();
+    void LoadHighscores();
+    void PersistHighscores();
 
     void UpdateTick();
     void RenderFrame();
@@ -46,6 +54,10 @@ private:
     game::Game game_;
     audio::AudioSystem audio_;
     audio::SFX sfx_;
+    io::Config config_;
+    io::Highscores highscores_;
+    std::filesystem::path config_path_;
+    std::filesystem::path highscores_path_;
     AppLuaContext lua_ctx_;
     snake::lua::LuaRuntime lua_;
     std::string lua_error_;
