@@ -1,25 +1,43 @@
 return {
-    window_w = 800,
-    window_h = 800,
-    fullscreen = false,
-    vsync = false,
+  window = {
+    width = 800,
+    height = 800,
+    fullscreen_desktop = false,
+    vsync = true,
+    panel_mode = "auto", -- "auto" | "top" | "right"
+  },
+
+  grid = {
     board_w = 20,
     board_h = 20,
     tile_size = 32,
     wrap_mode = false,
-    ui_panel_mode = "auto",
-    audio = {
-        master = 1.0,
-        sfx = 0.8,
-        music = 0.6,
-    },
+  },
+
+  audio = {
+    enabled = true,
+    master_volume = 96, -- 0..128
+    sfx_volume = 96,    -- 0..128
+  },
+
+  keybinds = {
+    up      = { "UP", "W" },
+    down    = { "DOWN", "S" },
+    left    = { "LEFT", "A" },
+    right   = { "RIGHT", "D" },
+
+    pause   = { "P", "P" },
+    restart = { "R", "R" },
+    menu    = { "ESCAPE", "ESCAPE" },
+    confirm = { "ENTER", "ENTER" },
+  },
+
+  gameplay = {
     food_score = 10,
-    keybinds = {
-        up = { primary = "W", secondary = "Up" },
-        down = { primary = "S", secondary = "Down" },
-        left = { primary = "A", secondary = "Left" },
-        right = { primary = "D", secondary = "Right" },
-        pause = { primary = "P", secondary = "Escape" },
-        restart = { primary = "R", secondary = "Enter" },
-    },
+    bonus_score_score = 50,
+    slow_multiplier = 0.70,
+    slow_duration_sec = 6.0,
+    always_one_food = true,
+    max_simultaneous_bonuses = 2,
+  },
 }
