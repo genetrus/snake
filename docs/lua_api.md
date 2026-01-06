@@ -1,132 +1,94 @@
-# Lua API (C++ ↔ Lua contract)
+# Lua API (контракт C++ ↔ Lua)
 
-**Project:** `snake`  
-**Runtime:** Windows, C++20 + SDL2 + Lua 5.4 (lua54.dll next to `snake.exe`)  
-**Goal of this document:** define the stable interface between the C++ engine and Lua scripts: file locations, load order, hooks, data structures, error handling, and hot-reload rules.
+**Проект:** `snake`  
+**Среда:** Windows, C++20 + SDL2 + Lua 5.4 (`lua54.dll` рядом с `snake.exe`)  
+**Цель документа:** зафиксировать интерфейс между C++-движком и Lua-скриптами: пути, загрузку, хук-и, форматы данных, контракт правил.
 
-> Status: **Draft (no-guess)** — this file includes only what is already specified and marks a few remaining design decisions as **OPEN**.  
-> Those OPEN items must be resolved once, then this document becomes final.
-
----
-
-## 1) Script locations
-
-### 1.1 Repository assets
-- `assets/scripts/rules.lua` — gameplay rules, formulas, spawn policy, reactions
-- `assets/scripts/config.lua` — default config template copied to AppData on first run
-
-### 1.2 User config (AppData)
-- `%AppData%/snake/config.lua` — active user config (edited by the game UI)
-- `%AppData%/snake/highscores.json` — highscores (JSON; not Lua)
-
-### 1.3 Load order (engine startup)
-1) Ensure `%AppData%/snake/` exists.
-2) If `%AppData%/snake/config.lua` missing → copy from `assets/scripts/config.lua`.
-3) Create a fresh Lua state.
-4) Load **user config**: `%AppData%/snake/config.lua`.
-5) Load **rules**: `assets/scripts/rules.lua`.
-6) Call hook `on_init(ctx)`.
-
-### 1.4 Hot reload (F5)
-- Trigger: **F5**, works everywhere (menu / playing / paused / game over).
-- Reload strategy:
-  1) Create a *new* Lua state.
-  2) Load `%AppData%/snake/config.lua`.
-  3) Load `assets/scripts/rules.lua`.
-  4) If everything succeeds → swap to the new state.
-  5) If any error happens → keep the old state and show the error to the user.
+> Статус: **Draft (no-guess)** — документ содержит только зафиксированные требования. Всё, что касается `rules.lua`, закреплено в разделе «Rules contract (assets/scripts/rules.lua)» и является единым источником правды.
 
 ---
 
-## 2) Data model shared with Lua
+## 1) Расположение скриптов и файлов
 
-Lua receives a **context table** `ctx` on every hook call.
+### 1.1 Репозиторий / assets
+- `assets/scripts/rules.lua` — правила, формулы, политика спавна, реакции
+- `assets/scripts/config.lua` — дефолтный конфиг, копируется в AppData при первом запуске
 
-### 2.1 Types
+### 1.2 Пользовательские данные (AppData)
+- `%AppData%/snake/config.lua` — активный конфиг (редактируется UI в игре)
+- `%AppData%/snake/highscores.json` — рекорды (JSON, не Lua)
 
-#### 2.1.1 Position
-Grid position is an integer cell coordinate:
+### 1.3 Порядок загрузки (старт приложения)
+1) Убедиться, что `%AppData%/snake/` существует.
+2) Если `%AppData%/snake/config.lua` отсутствует → копировать из `assets/scripts/config.lua`.
+3) Создать новое состояние Lua.
+4) Загрузить **пользовательский конфиг**: `%AppData%/snake/config.lua`.
+5) Загрузить **правила**: `assets/scripts/rules.lua`.
+6) Вызвать хук `on_app_init(ctx)` (если определён).
 
-```lua
-pos = { x = 0, y = 0 } -- 0-based indexing
-```
-
-#### 2.1.2 Direction
-Direction is a string:
-
-- `"up" | "down" | "left" | "right"`
-
-#### 2.1.3 Bonus type
-Bonus type is a string:
-
-- `"bonus_score" | "bonus_slow"`
-
-#### 2.1.4 Timestamp
-When Lua needs timestamps (rare), it should use ISO-8601 UTC strings:
-- `"2026-01-05T18:55:00Z"`
-
-> Note: highscores timestamps are created in C++ at save time.
+### 1.4 Хот-релоад (F5)
+- Триггер: **F5** (работает в меню, во время игры, на паузе, на экране GameOver).
+- Алгоритм:
+  1) Создать *новое* состояние Lua.
+  2) Загрузить `%AppData%/snake/config.lua`.
+  3) Загрузить `assets/scripts/rules.lua`.
+  4) Если всё успешно → подменить активное состояние.
+  5) Если ошибка → оставить старое состояние и показать ошибку пользователю.
 
 ---
 
-## 3) Context (`ctx`) structure
-
-The engine guarantees that `ctx` contains at least these fields.
+## 2) Контекст `ctx`
+Движок передаёт в Lua таблицу `ctx` на каждый вызов хука.
 
 ```lua
 ctx = {
-  -- immutable for the call
+  -- неизменяемые поля на время вызова
   phase = "menu" | "playing" | "paused" | "gameover",
-  dt = number,              -- real delta time in seconds (frame delta)
-  now = number,             -- monotonic time in seconds since app start
+  dt = number,              -- дельта времени рендера в секундах
+  now = number,             -- монотонное время с запуска приложения, сек
 
-  -- configuration snapshot (loaded from %AppData%/snake/config.lua)
+  -- снапшот конфига (%AppData%/snake/config.lua)
   config = {
-    board_w = integer,      -- default 20
-    board_h = integer,      -- default 20
-    tile_size = integer,    -- default 32
-    window_w = integer,     -- default 800
-    window_h = integer,     -- default 800
+    board_w = integer,      -- дефолт 20
+    board_h = integer,      -- дефолт 20
+    tile_size = integer,    -- дефолт 32
+    window_w = integer,     -- дефолт 800
+    window_h = integer,     -- дефолт 800
     fullscreen = boolean,   -- borderless fullscreen desktop
-    vsync = boolean,        -- option
-    wrap_mode = boolean,    -- walls vs wrap-around
+    vsync = boolean,
+
+    grid = {
+      wrap_mode = boolean,  -- стенки (false) или зацикливание (true)
+    },
 
     ui_panel_mode = "auto" | "top" | "right",
 
     audio = {
       master = number,      -- 0..1
       sfx = number,         -- 0..1
-      music = number,       -- 0..1 (reserved; music not mandatory)
+      music = number,       -- 0..1 (резерв)
     },
 
-    -- keybinds layout is OPEN (see §10)
-    keybinds = { },
+    keybinds = { },         -- схема пока открытая
   },
 
-  -- gameplay state snapshot
+  -- снапшот игрового состояния
   score = integer,
 
-  board = {
-    w = integer,
-    h = integer,
-  },
+  board = { w = integer, h = integer },
 
   snake = {
     dir = "up" | "down" | "left" | "right",
     length = integer,
     body = {
-      -- array of positions, head first: body[1] is head
-      {x=integer,y=integer},
+      {x=integer,y=integer}, -- массив позиций, голова = body[1]
       -- ...
     },
   },
 
-  food = {
-    pos = { x=integer, y=integer }
-  },
+  food = { pos = { x=integer, y=integer } },
 
   bonuses = {
-    -- array (0..2 items)
     { type="bonus_score", pos={x=integer,y=integer} },
     { type="bonus_slow",  pos={x=integer,y=integer} },
   },
@@ -134,269 +96,203 @@ ctx = {
   effects = {
     slow = {
       active = boolean,
-      multiplier = 0.70,     -- fixed multiplier
-      remaining = number,    -- seconds remaining (0 if inactive)
+      multiplier = 0.70,     -- фиксированный множитель
+      remaining = number,    -- секунды (0, если не активно)
     }
   },
 
-  -- last event payload (only for event hooks; nil otherwise)
+  -- полезная нагрузка события (только для event-хуков; иначе nil)
   event = nil,
 }
 ```
 
+### 2.1 Базовые типы
+- **Позиция**: `{ x = 0, y = 0 }` — целочисленные координаты клеток (0-based).
+- **Направление**: строки `"up" | "down" | "left" | "right"`.
+- **Тип бонуса**: строки `"bonus_score" | "bonus_slow"`.
+- **Timestamp**: ISO-8601 UTC, например `"2026-01-05T18:55:00Z"` (создаются на C++ стороне при сохранении рекордов).
+
 ---
 
-## 4) Engine guarantees and fixed rules (from spec)
-
-These are enforced by the C++ engine, even if Lua asks otherwise:
-- Food count on board: **always exactly 1**.
-- Bonus count on board: **max 2**, bonus types limited to `bonus_score`, `bonus_slow`.
-- Food/bonuses never spawn on the snake.
-- Snake growth:
-  - Food increases length by **+1**.
-  - `bonus_score` and `bonus_slow` **do not** grow the snake.
-- `bonus_score` adds **+50** immediately.
+## 3) Гарантии движка (C++)
+Эти правила **жёстко применяются** в C++ вне зависимости от Lua:
+- Еда на поле: всегда **ровно 1**.
+- Бонусы на поле: **не более 2**, типы только `bonus_score`, `bonus_slow`.
+- Спавн еды/бонусов **никогда** не попадает на тело змейки.
+- Рост змейки:
+  - Еда: длина +1.
+  - `bonus_score` и `bonus_slow` **не** растят змейку.
+- `bonus_score` добавляет **+50** сразу (если Lua не переопределит сумму через контракт правил, движок всё равно применит возвращаемое значение `pickup_effect`).
 - `bonus_slow`:
-  - speed multiplier: **×0.70**
-  - duration: **6 seconds**
-  - stacking: extends time by +6 seconds, multiplier never gets stronger.
-- Bonuses do **not** disappear over time (they remain until picked up).
-- Collisions:
-  - self-collision → **game over**
-  - wall collision behavior depends on `config.wrap_mode` (walls vs wrap)
+  - множитель скорости: **×0.70** (значение берётся из `config.gameplay.slow_multiplier`, дефолт 0.70);
+  - длительность: **6 секунд** (значение из `config.gameplay.slow_duration_sec`, дефолт 6.0);
+  - стак: **только продление времени**, множитель не накапливается.
+- Бонусы **не исчезают** со временем — лежат, пока не взяты.
+- Коллизии:
+  - самоукус → **GameOver**;
+  - со стеной → поведение зависит от `config.grid.wrap_mode` или логики `resolve_wall` (см. контракт правил).
 
 ---
 
-## 5) Hooks (C++ calls Lua)
+## 4) Хуки (C++ вызывает Lua)
+Все хуки задаются **глобальными функциями** в `rules.lua`. Любой отсутствующий хук трактуется как no-op.
 
-All hooks are **optional**. If a function is missing, the engine treats it as a no-op.
-
-### 5.1 on_init
-Called once on application start (after config+rules loaded).
-
+### 4.1 Жизненный цикл и события
 ```lua
-function on_init(ctx) end
+function on_app_init(ctx) end        -- один раз после загрузки конфигурации и правил
+function on_round_start(ctx) end     -- при старте/рестарте раунда
+function on_round_reset(ctx) end     -- когда раунд сброшен в исходное состояние
+function on_tick(ctx) end            -- фиксированный игровой тик
+function on_food_eaten(ctx) end      -- после поедания еды (score/length уже обновлены)
+function on_bonus_picked(ctx, bonus_type) end  -- после поднятия бонуса
+function on_game_over(ctx, reason) end         -- завершение раунда
+function on_setting_changed(ctx, key, value) end -- когда настройка изменена в UI
 ```
 
-### 5.2 on_tick
-Called for every **fixed tick** (simulation step), not per render frame.
+`ctx.event` для некоторых хуков:
+
+- `on_food_eaten`:
+  ```lua
+  ctx.event = {
+    type = "food_eaten",
+    food_score = integer,
+    new_score = integer,
+  }
+  ```
+
+- `on_bonus_picked`:
+  ```lua
+  ctx.event = {
+    type = "bonus_picked",
+    bonus_type = "bonus_score" | "bonus_slow",
+    new_score = integer,
+    slow_remaining = number, -- секунды (только для bonus_slow)
+  }
+  ```
+
+- `on_game_over`: `reason = "self_collision" | "wall_collision"`.
+
+Движок запускает UI/меню целиком на C++, Lua отвечает за правила, данные и реакции через эти вызовы.
+
+---
+
+## 5) Rules contract (`assets/scripts/rules.lua`)
+Этот раздел — **единый источник правды** для контракта правил. Всё, что описано ниже, обязательно для `rules.lua` и уже подкреплено проверками на C++ стороне.
+
+### 5.1 Общие принципы
+- Скрипты правил загружаются из `./assets/scripts/` рядом с исполняемым файлом.
+- Конфиг всегда читается из `%AppData%/snake/config.lua` и передаётся в Lua как `config` (см. `ctx.config`).
+- Все функции правил должны быть **глобальными**, никаких возвращаемых таблиц не используется.
+- Движок вызывает Lua; Lua не управляет UI или циклом игры самостоятельно.
+
+### 5.2 Обязательные глобальные функции правил
+`rules.lua` обязан определить следующие функции (их отсутствие считается ошибкой загрузки):
+
+1. **`speed_ticks_per_sec(score, config) -> number`**
+   - **Вход:** `score` (integer, текущий счёт), `config` (таблица из `%AppData%/snake/config.lua`).
+   - **Выход:** `ticks_per_sec` (`number > 0`).
+   - **Семантика:** задаёт базовую скорость тиков (шагов в секунду) **до** применения эффекта замедления. Движок сам умножает результат на `slow_multiplier`, когда активен эффект замедления.
+
+2. **`resolve_wall(x, y, board_w, board_h, wrap_mode) -> (alive:boolean, nx:integer, ny:integer)`**
+   - **Вход:** `x`, `y` — предполагаемая следующая клетка головы; `board_w`, `board_h` — размеры поля; `wrap_mode` — булев флаг `config.grid.wrap_mode`.
+   - **Выход:**
+     - `alive=false` → столкновение со стеной, наступает GameOver.
+     - `alive=true` → ход разрешён, координаты скорректированы до `(nx, ny)`.
+   - **Поведение по умолчанию:**
+     - если `wrap_mode == true`: возвратить `alive=true` и обернуть координаты (`nx = (x % board_w + board_w) % board_w`, аналогично для `y`);
+     - иначе: если выход за границы → `alive=false`; если внутри поля → `alive=true` с теми же координатами.
+
+3. **`pickup_effect(kind, config) -> table`**
+   - **Вход:** `kind` — строка `"food" | "bonus_score" | "bonus_slow"`; `config` — таблица конфига.
+   - **Выход:** таблица со всеми полями (каждое поле обязательно):
+     - `score_delta` (integer)
+     - `grow` (boolean)
+     - `slow_add_sec` (number, 0 если эффекта нет)
+   - **Фиксированные правила:**
+     - `food`: `score_delta = config.gameplay.food_score` (дефолт 10), `grow = true`, `slow_add_sec = 0`.
+     - `bonus_score`: `score_delta = 50` (или `config.gameplay.bonus_score_score`, если поле есть), `grow = false`, `slow_add_sec = 0`.
+     - `bonus_slow`: `score_delta = 0`, `grow = false`, `slow_add_sec = config.gameplay.slow_duration_sec` (дефолт 6.0).
+   - **Поведение движка:** применяет `score_delta`, увеличивает длину, если `grow == true`, и продлевает таймер замедления на `slow_add_sec`, если он больше нуля. Сам множитель замедления всегда берётся из `config.gameplay.slow_multiplier` (дефолт 0.70); множители не накапливаются, удлиняется только время.
+
+4. **`want_spawn_bonus(score, config, bonuses_count) -> (bonus_type | nil)`**
+   - **Вход:** `score` (integer), `config` (таблица), `bonuses_count` (integer, текущее количество бонусов на поле).
+   - **Выход:** `nil` → не спавнить бонус; `"bonus_score"` или `"bonus_slow"` → запросить спавн указанного типа.
+   - **Гарантии со стороны C++:** на поле всегда **ровно 1** еда; бонусов **не более 2**; бонусы никогда не появляются на змейке; бонусы не исчезают по времени. Lua решает только политику/вероятности и тип бонуса, когда движок запрашивает спавн.
+
+### 5.3 Дополнительные замечания
+- Эффект замедления всегда задаётся движком множителем `config.gameplay.slow_multiplier` и длительностью, которая складывается по времени (`slow_add_sec`).
+- Поле `wrap_mode` приходит из `config.grid.wrap_mode` (в конфиге опция хранится в `config.grid`, но в контексте `resolve_wall` передаётся отдельным аргументом для удобства).
+- Все хуки из §4 и функции из этого раздела — глобальные; никаких таблиц `return` не используется.
+
+---
+
+## 6) Обработка ошибок (Lua)
+- Любая ошибка Lua должна превращаться в читаемую строку.
+- Ошибка при хот-релоаде: движок сохраняет старое состояние и показывает сообщение.
+- Ошибка во время тика: движок не падает, логирует/показывает ошибку и продолжает работу с тем же состоянием Lua.
+
+---
+
+## 7) Замечания по производительности
+- Хуки должны быть быстрыми; избегайте тяжёлых аллокаций на каждый тик.
+- Предпочитайте предвычисления и константные таблицы.
+- Не загружайте файлы в `on_tick`; используйте `on_app_init` и хот-релоад.
+
+---
+
+## 8) Пример каркаса `rules.lua`
 
 ```lua
-function on_tick(ctx) end
-```
+-- rules.lua (каркас, все функции глобальные)
 
-### 5.3 on_round_start
-Called when a round starts or restarts.
-
-```lua
+function on_app_init(ctx) end
 function on_round_start(ctx) end
-```
-
-### 5.4 on_food_eaten
-Called after food is eaten and score/length updates are applied.
-
-```lua
+function on_round_reset(ctx) end
+function on_tick(ctx) end
 function on_food_eaten(ctx) end
-```
-
-`ctx.event` for this hook:
-
-```lua
-ctx.event = {
-  type = "food_eaten",
-  food_score = integer,          -- e.g., 10
-  new_score = integer,
-}
-```
-
-### 5.5 on_bonus_picked
-Called after a bonus is picked and its effect is applied.
-
-```lua
 function on_bonus_picked(ctx, bonus_type) end
-```
-
-`bonus_type` is `"bonus_score"` or `"bonus_slow"`.
-
-`ctx.event` for this hook:
-
-```lua
-ctx.event = {
-  type = "bonus_picked",
-  bonus_type = "bonus_score" | "bonus_slow",
-  new_score = integer,
-  slow_remaining = number,       -- seconds (only for bonus_slow)
-}
-```
-
-### 5.6 on_game_over
-Called when the round ends.
-
-```lua
 function on_game_over(ctx, reason) end
-```
-
-`reason` is one of:
-- `"self_collision"`
-- `"wall_collision"`
-
-### 5.7 on_setting_changed
-Called when an option is changed in the UI. The engine also persists the change immediately to `%AppData%/snake/config.lua`.
-
-```lua
 function on_setting_changed(ctx, key, value) end
-```
 
-- `key`: string path, e.g. `"wrap_mode"`, `"board_w"`, `"audio.sfx"`, `"keybinds.up.primary"`, etc.
-- `value`: number/string/bool/table
+function speed_ticks_per_sec(score, config)
+  return 10.0 + score * 0.05 -- пример
+end
 
----
-
-## 6) Lua-provided functions (Lua returns values to C++)
-
-This section defines functions the engine will call to obtain formulas/policies.
-
-> OPEN: exact function packaging (globals vs returned table) is not yet frozen; see §10.
-
-### 6.1 Speed formula
-The engine needs a function that returns the **base** speed as a function of score.
-
-**Required behavior:**
-- default base speed starts at **10 steps/sec**
-- speed grows **with score**
-- `bonus_slow` is applied in C++ by multiplying base speed by 0.70 while active
-
-**OPEN (choose one):**
-- Option A (recommended): return **steps_per_second**
-  ```lua
-  function speed_steps_per_sec(ctx, score)
-    return 10.0 + score * 0.05
+function resolve_wall(x, y, board_w, board_h, wrap_mode)
+  if wrap_mode then
+    local nx = (x % board_w + board_w) % board_w
+    local ny = (y % board_h + board_h) % board_h
+    return true, nx, ny
   end
-  ```
-- Option B: return **tick_dt_seconds**
-  ```lua
-  function tick_dt_seconds(ctx, score)
-    return 1.0 / (10.0 + score * 0.05)
+  if x < 0 or x >= board_w or y < 0 or y >= board_h then
+    return false, x, y
   end
-  ```
+  return true, x, y
+end
 
-### 6.2 Score values
-Food score is fixed +10 but stored in Lua as config. The engine expects:
-
-```lua
--- either config.food_score or rules.food_score; OPEN (see §10)
-```
-
-Bonus score is fixed +50 (engine-enforced), but can also be exposed in Lua for UI text.
-
-### 6.3 Spawn policy for bonuses
-The engine must decide **when** to spawn up to 2 bonuses (never exceeding limit).
-
-Lua should provide a deterministic policy driven by ctx and RNG.
-
-**OPEN (choose one):**
-- Option A: engine asks after food eaten:
-  ```lua
-  function choose_bonus_to_spawn_after_food(ctx)
-    -- return nil or "bonus_score" / "bonus_slow"
+function pickup_effect(kind, config)
+  if kind == "food" then
+    return { score_delta = config.gameplay.food_score, grow = true, slow_add_sec = 0 }
+  elseif kind == "bonus_score" then
+    local bonus_score = config.gameplay.bonus_score_score or 50
+    return { score_delta = bonus_score, grow = false, slow_add_sec = 0 }
+  elseif kind == "bonus_slow" then
+    return { score_delta = 0, grow = false, slow_add_sec = config.gameplay.slow_duration_sec }
   end
-  ```
-- Option B: engine asks every tick:
-  ```lua
-  function choose_bonus_to_spawn(ctx)
-    -- return nil or "bonus_score" / "bonus_slow"
-  end
-  ```
-
-RNG source is OPEN (see §10).
-
----
-
-## 7) Error handling (Lua side)
-- Any Lua error must be converted into a readable string.
-- On hot reload errors: engine keeps old Lua state and shows the error.
-- On runtime hook errors (during a tick):
-  - engine should treat it as non-fatal for that frame/tick, log/show error,
-  - and keep running with the same Lua state.
-
----
-
-## 8) Performance notes
-- Hooks should be fast; avoid heavy allocations per tick.
-- Prefer precomputed tables and constant lookups.
-- Avoid loading files during tick; use `on_init` and hot reload.
-
----
-
-## 9) Example `rules.lua` skeleton (draft)
-
-```lua
--- rules.lua (draft skeleton)
-
--- OPEN: should these functions be globals or returned in a table.
--- See §10 for final decision.
-
-function on_init(ctx)
-  -- init internal state if needed
+  error("unknown pickup kind: " .. tostring(kind))
 end
 
-function on_round_start(ctx)
-end
-
-function on_tick(ctx)
-end
-
-function on_food_eaten(ctx)
-end
-
-function on_bonus_picked(ctx, bonus_type)
-end
-
-function on_game_over(ctx, reason)
-end
-
-function on_setting_changed(ctx, key, value)
-end
-
--- OPEN: speed API
-function speed_steps_per_sec(ctx, score)
-  -- Example: base 10, grows slowly with score
-  return 10.0 + score * 0.05
-end
-
--- OPEN: spawn policy API
-function choose_bonus_to_spawn_after_food(ctx)
-  -- return nil or "bonus_score" / "bonus_slow"
+function want_spawn_bonus(score, config, bonuses_count)
+  -- пример: не спавнить, если уже есть 2 бонуса
+  if bonuses_count >= 2 then return nil end
   return nil
 end
 ```
 
 ---
 
-## 10) OPEN decisions (must be fixed once)
-
-To finalize this contract, choose and record these decisions:
-
-1) **Module style**: do scripts define **global functions**, or do they `return` a table?
-   - Option A: globals (simple C API lookups)
-   - Option B: `return { on_init=..., ... }` (namespaced)
-
-2) **Keybind encoding in config.lua**: how keys are represented in Lua:
-   - Option A: strings like `"W"`, `"Up"`, `"Esc"`
-   - Option B: SDL keycodes (integers)
-   - Option C: SDL scancodes (integers)
-
-3) **Which actions are bindable**:
-   - movement only, or also pause/restart/menu accept/back?
-
-4) **Speed formula return type**:
-   - steps/sec (recommended) vs tick_dt seconds
-
-5) **Bonus spawn API**:
-   - called after food eaten vs called each tick
-
-6) **RNG ownership**:
-   - engine provides `ctx.rng` (e.g., seeded int stream), or
-   - Lua uses `math.random` but seeded by engine
-
-When these are chosen, update this document and remove the OPEN markers.
+## 9) Открытые вопросы (не перекрывают контракт правил)
+Некоторые детали вне правил остаются на доработку и не влияют на раздел §5:
+1) Кодирование `keybinds` в `config.lua` (строки/SDL keycode/SDL scancode).
+2) Перечень доступных для биндинга действий (только движение или также пауза/рестарт/accept/back).
+```
