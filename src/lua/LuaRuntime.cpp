@@ -155,7 +155,7 @@ lua_State* LuaRuntime::L() const {
     return L_;
 }
 
-bool LuaRuntime::GetSpeedTicksPerSec(int score, double* out_ticks_per_sec) {
+bool LuaRuntime::GetBaseTicksPerSec(int score, double* out_ticks_per_sec) {
     if (!IsReady() || out_ticks_per_sec == nullptr) {
         return false;
     }
@@ -194,6 +194,10 @@ bool LuaRuntime::GetSpeedTicksPerSec(int score, double* out_ticks_per_sec) {
     *out_ticks_per_sec = tps;
     last_error_.reset();
     return true;
+}
+
+bool LuaRuntime::GetSpeedTicksPerSec(int score, double* out_ticks_per_sec) {
+    return GetBaseTicksPerSec(score, out_ticks_per_sec);
 }
 
 bool LuaRuntime::PCall(int nargs, int nrets, std::string_view where) {

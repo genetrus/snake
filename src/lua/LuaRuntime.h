@@ -39,6 +39,7 @@ public:
     lua_State* L() const;
 
     // speed_ticks_per_sec(score, config) -> number (>0)
+    bool GetBaseTicksPerSec(int score, double* out_ticks_per_sec);
     bool GetSpeedTicksPerSec(int score, double* out_ticks_per_sec);
 
 private:

@@ -58,7 +58,7 @@ private:
     snake::io::Config config_;
     snake::render::Renderer renderer_impl_;
     AppLuaContext lua_ctx_{};
-    double last_ticks_per_sec_ = 10.0;
+    double last_base_ticks_per_sec_ = 10.0;
     std::string renderer_error_text_;
 };
 }  // namespace snake::core
