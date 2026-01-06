@@ -29,16 +29,16 @@ void UIRenderer::Render(SDL_Renderer* r, const Layout& l, const snake::game::Gam
     std::ostringstream top_line;
     top_line << "State: ";
     switch (game.State()) {
-        case snake::game::State::Menu:
+        case snake::game::GameState::Menu:
             top_line << "Menu";
             break;
-        case snake::game::State::Playing:
+        case snake::game::GameState::Playing:
             top_line << "Playing";
             break;
-        case snake::game::State::Paused:
+        case snake::game::GameState::Paused:
             top_line << "Paused";
             break;
-        case snake::game::State::GameOver:
+        case snake::game::GameState::GameOver:
             top_line << "Game Over";
             break;
         default:

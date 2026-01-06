@@ -2,12 +2,12 @@
 
 namespace snake::game {
 
-enum class State { Menu, Playing, Paused, GameOver };
+enum class GameState { Menu, Playing, Paused, GameOver };
 
 class StateMachine {
 public:
     void ResetToMenu();
-    State Current() const;
+    GameState Current() const;
 
     void StartGame();  // Menu -> Playing and reset round
     void Pause();      // Playing -> Paused
@@ -17,6 +17,6 @@ public:
     void BackToMenu(); // any -> Menu
 
 private:
-    State state_ = State::Menu;
+    GameState state_ = GameState::Menu;
 };
 }  // namespace snake::game
