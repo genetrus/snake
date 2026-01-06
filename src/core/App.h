@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <filesystem>
+#include <functional>
 
 #include "core/Input.h"
 #include "core/Time.h"
@@ -51,11 +52,18 @@ private:
     void BeginRebind(const std::string& action, int slot);
     void HandleRebind();
     void PushUiMessage(std::string msg);
-    void ApplyImmediateSettings(const snake::io::ConfigData& cfg);
+    bool ApplyImmediateSettings(const snake::io::ConfigData& previous,
+                                const snake::io::ConfigData& current);
     void ApplyRoundSettingsOnRestart();
     void SyncActiveWithPendingPreserveRound();
     bool HasPendingRoundChanges() const;
     void RefreshPendingRoundRestartFlag();
+    enum class ApplyMode { Immediate, OnRestart };
+    bool CommitConfigChange(
+        const std::string& key_path,
+        ApplyMode mode,
+        const std::function<bool(snake::io::ConfigData&)>& mutate,
+        const std::function<bool(const snake::io::ConfigData&, const snake::io::ConfigData&)>& apply);
 
     SDL_Window* window_ = nullptr;
     SDL_Renderer* renderer_ = nullptr;
@@ -91,5 +99,6 @@ private:
     AppLuaContext lua_ctx_{};
     double last_base_ticks_per_sec_ = 10.0;
     std::string renderer_error_text_;
+    std::string config_error_text_;
 };
 }  // namespace snake::core
