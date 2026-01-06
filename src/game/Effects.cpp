@@ -3,43 +3,34 @@
 namespace snake::game {
 
 void Effects::Reset() {
-    slow_remaining_ = 0.0;
+    slow_remaining_sec_ = 0.0;
 }
 
-void Effects::Tick(double tick_dt) {
-    if (slow_remaining_ <= 0.0) {
+void Effects::Update(double tick_dt) {
+    if (slow_remaining_sec_ <= 0.0) {
         return;
     }
 
-    slow_remaining_ -= tick_dt;
-    if (slow_remaining_ < 0.0) {
-        slow_remaining_ = 0.0;
+    slow_remaining_sec_ -= tick_dt;
+    if (slow_remaining_sec_ < 0.0) {
+        slow_remaining_sec_ = 0.0;
     }
 }
 
-void Effects::ApplySlow() {
-    slow_remaining_ += slow_duration_;
-}
-
-void Effects::SetSlowParams(double multiplier, double duration) {
-    if (multiplier > 0.0) {
-        slow_multiplier_ = multiplier;
-    }
-    if (duration > 0.0) {
-        slow_duration_ = duration;
-    }
+void Effects::AddSlow(double sec) {
+    slow_remaining_sec_ += sec;
 }
 
 bool Effects::SlowActive() const {
-    return slow_remaining_ > 0.0;
+    return slow_remaining_sec_ > 0.0;
 }
 
 double Effects::SlowMultiplier() const {
-    return slow_multiplier_;
+    return kSlowMultiplier;
 }
 
 double Effects::SlowRemaining() const {
-    return slow_remaining_;
+    return slow_remaining_sec_;
 }
 
 }  // namespace snake::game

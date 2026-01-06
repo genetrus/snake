@@ -17,6 +17,8 @@ class Game {
 public:
     struct TickEvents {
         bool food_eaten = false;
+        bool bonus_picked = false;
+        std::string bonus_type;
     };
 
     struct Controls {

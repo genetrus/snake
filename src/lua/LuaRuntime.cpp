@@ -115,6 +115,18 @@ bool LuaRuntime::CallWithCtxIfExists(std::string_view fn, void* ctx_ptr) {
     return PCall(1, 0, std::string("pcall:").append(fn));
 }
 
+bool LuaRuntime::CallWithCtxIfExists(std::string_view fn, void* ctx_ptr, std::string_view arg1) {
+    if (!IsReady()) return false;
+    lua_getglobal(L_, std::string(fn).c_str());
+    if (!lua_isfunction(L_, -1)) {
+        lua_pop(L_, 1);
+        return true;
+    }
+    lua_pushlightuserdata(L_, ctx_ptr);
+    lua_pushlstring(L_, arg1.data(), arg1.size());
+    return PCall(2, 0, std::string("pcall:").append(fn));
+}
+
 bool LuaRuntime::HotReload(const std::filesystem::path& rules_path,
                            const std::filesystem::path& config_path) {
     LuaRuntime tmp;
