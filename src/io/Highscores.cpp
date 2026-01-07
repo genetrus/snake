@@ -1,5 +1,7 @@
 #include "io/Highscores.h"
 
+#include <SDL_log.h>
+
 #include <algorithm>
 #include <chrono>
 #include <cctype>
@@ -16,10 +18,27 @@ constexpr std::size_t kMaxEntries = 10;
 
 bool ParseEntries(const nlohmann::json& json, std::vector<Entry>& out) {
     std::vector<Entry> parsed;
+    const nlohmann::json* entries_json = nullptr;
 
-    if (json.is_array()) {
-        for (const auto& item : json) {
-            Entry e;
+    if (json.is_object()) {
+        if (json.contains("entries")) {
+            if (!json["entries"].is_array()) {
+                return false;
+            }
+            entries_json = &json["entries"];
+        } else {
+            out.clear();
+            return true;
+        }
+    } else if (json.is_array()) {
+        entries_json = &json;
+    } else {
+        return false;
+    }
+
+    for (const auto& item : *entries_json) {
+        Entry e;
+        if (item.is_object()) {
             if (item.contains("name") && item["name"].is_string()) {
                 e.name = item["name"].get<std::string>();
             }
@@ -29,12 +48,8 @@ bool ParseEntries(const nlohmann::json& json, std::vector<Entry>& out) {
             if (item.contains("achieved_at") && item["achieved_at"].is_string()) {
                 e.achieved_at = item["achieved_at"].get<std::string>();
             }
-            parsed.push_back(std::move(e));
         }
-    } else if (json.is_object() && json.contains("entries") && json["entries"].is_array()) {
-        return ParseEntries(json["entries"], out);
-    } else {
-        return false;
+        parsed.push_back(std::move(e));
     }
 
     out = std::move(parsed);
@@ -84,11 +99,15 @@ bool Highscores::Load(const std::filesystem::path& path) {
     nlohmann::json json;
     try {
         ifs >> json;
-    } catch (...) {
-        return true;  // treat as empty
+    } catch (const std::exception& ex) {
+        SDL_Log("Failed to parse highscores JSON at %s: %s", path.string().c_str(), ex.what());
+        entries_.clear();
+        return true;
     }
 
-    ParseEntries(json, entries_);
+    if (!ParseEntries(json, entries_)) {
+        entries_.clear();
+    }
 
     // sanitize names
     for (auto& e : entries_) {

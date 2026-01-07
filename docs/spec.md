@@ -35,7 +35,7 @@
 
 ### 3.3 Bootstrap при старте
 - Если `%AppData%/snake/config.lua` отсутствует → **копировать** дефолтный из `assets/scripts/config.lua`
-- Если `%AppData%/snake/highscores.json` отсутствует → **создать пустой валидный JSON**
+- Если `%AppData%/snake/highscores.json` отсутствует → **создать пустой валидный JSON** `{ "version": 1, "entries": [] }`
 
 ## 4. Экран, окно, масштабирование
 ### 4.1 Окно
@@ -212,13 +212,29 @@ Lua задаёт/обрабатывает:
 ## 16. Highscores
 - Top: **10** записей
 - Место хранения: `%AppData%/snake/highscores.json`
-- JSON поля записи:
+
+### 16.1 Highscores file format
+Единый формат файла (schema **строго фиксирован**):
+```
+{
+  "version": 1,
+  "entries": [
+    { "name": "Player", "score": 123, "achieved_at": "2026-01-05T18:55:00Z" }
+  ]
+}
+```
+
+Правила:
+- Путь файла: `%AppData%/snake/highscores.json`
+- `version`: обязательное целое число, текущая версия = **1**
+- `entries`: массив объектов с полями:
   - `name` (string)
   - `score` (int)
-  - `achieved_at` (timestamp, **ISO-8601 строка в UTC**, например `2026-01-05T18:55:00Z`)
-- Сортировка: по убыванию `score`, при равенстве — более ранний `achieved_at` выше.
+  - `achieved_at` (string) — **ISO-8601 UTC** в формате `YYYY-MM-DDTHH:MM:SSZ`
+- Храним только **Top-10**: сортировка по `score` по убыванию; при равенстве — более ранний `achieved_at` выше.
+- Если файл отсутствует при старте — создаётся пустой валидный файл `{ "version": 1, "entries": [] }`.
 
-### 16.1 Ввод имени
+### 16.2 Ввод имени
 - Ввод имени показывается при попадании в Top-10.
 - Разрешённые символы:
   - латиница: `A–Z`, `a–z`
