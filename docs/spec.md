@@ -179,11 +179,11 @@ Lua задаёт/обрабатывает:
 - `on_setting_changed(ctx, key, value)`
 
 ### State machine / Screens
-- Экранов шесть: **MainMenu**, **Options**, **Highscores**, **Playing**, **Paused** (оверлей), **GameOver**.
-- Переходы: Start в меню запускает Playing; Options/Highscores выходят в меню по Esc; в Playing клавиша **P** ставит игру на паузу (**Paused**), повторное **P** возвращает; **Esc** из Playing/Paused ведёт в меню; столкновение переводит в GameOver; на GameOver **Enter/R** рестартят раунд и возвращают в Playing, **Esc** — в меню.
+- Экранов семь: **MainMenu**, **Options**, **Highscores**, **Playing**, **Paused** (оверлей), **GameOver**, **NameEntry**.
+- Переходы: Start в меню запускает Playing; Options/Highscores выходят в меню по Esc; в Playing клавиша **P** ставит игру на паузу (**Paused**), повторное **P** возвращает; **Esc** из Playing/Paused ведёт в меню; столкновение переводит в GameOver; если счёт попадает в Top-10, открывается экран **NameEntry**; подтверждение на NameEntry сохраняет рекорд и открывает Highscores, отмена возвращает в GameOver; на GameOver **Enter/R** рестартят раунд и возвращают в Playing, **Esc** — в меню.
 - Тики игрового мира идут **только в Playing**; Paused рисует оверлей без тиков.
 - Настройки, требующие рестарта раунда (board size / wrap), применяются при рестарте (R/Enter) после отметки pending.
-- При входе в GameOver текущий счёт добавляется в таблицу рекордов и сохраняется; экран Highscores показывает сохранённые записи.
+- При входе в GameOver текущий счёт сохраняется только после ввода имени, если он попадает в Top-10; экран Highscores показывает сохранённые записи.
 
 ## 14. Hot reload Lua
 - Клавиша: **F5**
@@ -216,6 +216,7 @@ Lua задаёт/обрабатывает:
   - `name` (string)
   - `score` (int)
   - `achieved_at` (timestamp, **ISO-8601 строка в UTC**, например `2026-01-05T18:55:00Z`)
+- Сортировка: по убыванию `score`, при равенстве — более ранний `achieved_at` выше.
 
 ### 16.1 Ввод имени
 - Ввод имени показывается при попадании в Top-10.

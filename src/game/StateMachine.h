@@ -8,7 +8,8 @@ enum class Screen {
   Highscores,
   Playing,
   Paused,    // overlay on top of Playing, but keep as separate screen for simplicity
-  GameOver
+  GameOver,
+  NameEntry
 };
 
 class StateMachine {
@@ -25,6 +26,7 @@ public:
   void Pause();          // -> Paused (only from Playing)
   void Resume();         // -> Playing (only from Paused)
   void GameOver();       // -> GameOver
+  void NameEntry();      // -> NameEntry
 private:
   Screen screen_ = Screen::MainMenu;
 };

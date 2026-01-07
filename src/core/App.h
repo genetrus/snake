@@ -46,6 +46,10 @@ private:
     void InitLua();
     void HandleMenus(bool& running);
     void HandleOptionsInput();
+    void HandleNameEntryInput();
+    void HandleNameEntryTextInput(const char* text);
+    void EnterNameEntry(int score);
+    void ExitNameEntry();
     void ApplyAudioSettings();
     void ApplyControlSettings();
     void NotifySettingChanged(const std::string& key);
@@ -94,6 +98,10 @@ private:
     int options_index_ = 0;
     std::vector<std::string> menu_items_;
     std::filesystem::path config_path_;
+    std::string name_entry_;
+    int pending_highscore_score_ = 0;
+    bool has_pending_highscore_ = false;
+    bool name_entry_active_ = false;
 
     snake::render::Renderer renderer_impl_;
     AppLuaContext lua_ctx_{};

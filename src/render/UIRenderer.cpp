@@ -40,6 +40,9 @@ void UIRenderer::Render(SDL_Renderer* r,
         case snake::game::Screen::GameOver:
             RenderGameOver(r, l, ui);
             break;
+        case snake::game::Screen::NameEntry:
+            RenderNameEntry(r, l, ui);
+            break;
         case snake::game::Screen::Playing:
         default:
             break;
@@ -62,6 +65,7 @@ void UIRenderer::Render(SDL_Renderer* r,
         case snake::game::Screen::Playing: top_line << "Playing"; break;
         case snake::game::Screen::Paused: top_line << "Paused"; break;
         case snake::game::Screen::GameOver: top_line << "Game Over"; break;
+        case snake::game::Screen::NameEntry: top_line << "Name Entry"; break;
     }
     top_line << "   Score: " << game.GetScore().Score();
 
@@ -217,6 +221,33 @@ void UIRenderer::RenderGameOver(SDL_Renderer* r, const Layout& l, const UiFrameD
     DrawTextLine(r, l.window_w / 2 - 80, l.window_h / 2, "Reason: " + ui.game_over_reason);
     DrawTextLine(r, l.window_w / 2 - 60, l.window_h / 2 + 20, "Score: " + std::to_string(ui.final_score));
     DrawTextLine(r, l.window_w / 2 - 120, l.window_h / 2 + 44, "Enter/R: Restart   Esc: Menu");
+}
+
+void UIRenderer::RenderNameEntry(SDL_Renderer* r, const Layout& l, const UiFrameData& ui) {
+    SDL_Rect backdrop{0, 0, l.window_w, l.window_h};
+    SDL_SetRenderDrawColor(r, 6, 6, 10, 220);
+    SDL_RenderFillRect(r, &backdrop);
+
+    const int start_x = l.window_w / 2 - 160;
+    int y = l.window_h / 2 - 80;
+    DrawTextLine(r, start_x, y, "NEW HIGHSCORE!");
+    y += 28;
+    DrawTextLine(r, start_x, y, "Score: " + std::to_string(ui.final_score));
+    y += 28;
+    DrawTextLine(r, start_x, y, "Enter name (1-12):");
+    y += 28;
+
+    std::string display = ui.name_entry;
+    if (display.size() < 12) {
+        display.push_back('|');
+    }
+    SDL_Rect input_box{start_x - 6, y - 6, 320, 28};
+    SDL_SetRenderDrawColor(r, 40, 60, 80, 200);
+    SDL_RenderFillRect(r, &input_box);
+    DrawTextLine(r, start_x, y - 2, display);
+    y += 36;
+
+    DrawTextLine(r, start_x, y, "Enter: Save   Esc: Cancel   Backspace: Delete");
 }
 
 }  // namespace snake::render

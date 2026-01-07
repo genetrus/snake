@@ -5,8 +5,10 @@
 #include <SDL_ttf.h>
 
 #include <algorithm>
+#include <cctype>
 #include <functional>
 #include <stdexcept>
+#include <string_view>
 #include <lua.hpp>
 
 #include "audio/AudioSystem.h"
@@ -20,6 +22,11 @@ namespace {
 constexpr int kDefaultWindowW = 800;
 constexpr int kDefaultWindowH = 800;
 constexpr int kMaxTicksPerFrame = 10;
+constexpr std::size_t kMaxNameEntryLen = 12;
+
+bool IsAllowedNameEntryChar(char c) {
+    return std::isalnum(static_cast<unsigned char>(c)) || c == ' ' || c == '_' || c == '-';
+}
 }  // namespace
 
 App::App() = default;
@@ -81,6 +88,10 @@ int App::Run() {
                         default:
                             break;
                     }
+                }
+
+                if (event.type == SDL_TEXTINPUT) {
+                    HandleNameEntryTextInput(event.text.text);
                 }
 
                 input_.HandleEvent(event);
@@ -230,6 +241,7 @@ void App::RenderFrame() {
     ui.lua_error = lua_reload_error_;
     ui.game_over_reason = game_.GameOverReason();
     ui.final_score = game_.GetScore().Score();
+    ui.name_entry = name_entry_;
     ui.config = &pending_config_.Data();
     ui.highscores = &highscores_.Entries();
     ui.menu_items = menu_items_;
@@ -459,6 +471,9 @@ void App::HandleMenus(bool& running) {
                 game_.ResetAll();
             }
             break;
+        case snake::game::Screen::NameEntry:
+            HandleNameEntryInput();
+            break;
     }
 
     if (sm_.Is(snake::game::Screen::Playing)) {
@@ -508,13 +523,86 @@ void App::HandleMenus(bool& running) {
 
         if (game_.IsGameOver()) {
             sm_.GameOver();
-            highscores_.TryAdd(active_config_.Data().player_name, game_.GetScore().Score(), snake::io::Highscores::NowIsoUtc());
-            highscores_.Save(highscores_path);
+            const int score = game_.GetScore().Score();
+            if (highscores_.Qualifies(score)) {
+                EnterNameEntry(score);
+            }
             lua_.CallWithCtxIfExists("on_game_over", &lua_ctx_, game_.GameOverReason());
         }
     } else {
         time_.UpdateFrame();
     }
+}
+
+void App::HandleNameEntryInput() {
+    const bool backspace_pressed = input_.KeyPressed(SDLK_BACKSPACE);
+    const bool enter_pressed = input_.KeyPressed(SDLK_RETURN) || input_.KeyPressed(SDLK_KP_ENTER);
+    const bool escape_pressed = input_.KeyPressed(SDLK_ESCAPE);
+
+    if (backspace_pressed && !name_entry_.empty()) {
+        name_entry_.pop_back();
+        return;
+    }
+
+    if (enter_pressed) {
+        if (!name_entry_.empty() && has_pending_highscore_) {
+            const snake::io::Entry entry{name_entry_, pending_highscore_score_, snake::io::Highscores::NowIsoUtc()};
+            if (highscores_.TryInsert(entry)) {
+                const auto highscores_path = snake::io::UserPath("highscores.json");
+                highscores_.Save(highscores_path);
+            }
+            ExitNameEntry();
+            sm_.OpenHighscores();
+        }
+        return;
+    }
+
+    if (escape_pressed) {
+        ExitNameEntry();
+        sm_.GameOver();
+    }
+}
+
+void App::HandleNameEntryTextInput(const char* text) {
+    if (!sm_.Is(snake::game::Screen::NameEntry) || text == nullptr) {
+        return;
+    }
+
+    std::string_view view(text);
+    for (char c : view) {
+        const unsigned char uc = static_cast<unsigned char>(c);
+        if (uc >= 0x80) {
+            continue;
+        }
+        if (!IsAllowedNameEntryChar(c)) {
+            continue;
+        }
+        if (name_entry_.size() >= kMaxNameEntryLen) {
+            break;
+        }
+        name_entry_.push_back(c);
+    }
+}
+
+void App::EnterNameEntry(int score) {
+    pending_highscore_score_ = score;
+    has_pending_highscore_ = true;
+    name_entry_.clear();
+    sm_.NameEntry();
+    if (!name_entry_active_) {
+        SDL_StartTextInput();
+        name_entry_active_ = true;
+    }
+}
+
+void App::ExitNameEntry() {
+    if (name_entry_active_) {
+        SDL_StopTextInput();
+        name_entry_active_ = false;
+    }
+    name_entry_.clear();
+    pending_highscore_score_ = 0;
+    has_pending_highscore_ = false;
 }
 
 void App::HandleOptionsInput() {
