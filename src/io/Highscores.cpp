@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <ctime>
 #include <fstream>
+#include <iterator>
 
 #include "nlohmann/json.hpp"
 
@@ -18,23 +19,17 @@ constexpr std::size_t kMaxEntries = 10;
 
 bool ParseEntries(const nlohmann::json& json, std::vector<Entry>& out) {
     std::vector<Entry> parsed;
-    const nlohmann::json* entries_json = nullptr;
-
-    if (json.is_object()) {
-        if (json.contains("entries")) {
-            if (!json["entries"].is_array()) {
-                return false;
-            }
-            entries_json = &json["entries"];
-        } else {
-            out.clear();
-            return true;
-        }
-    } else if (json.is_array()) {
-        entries_json = &json;
-    } else {
+    if (!json.is_object()) {
         return false;
     }
+    if (!json.contains("version") || !json["version"].is_number_integer() ||
+        json["version"].get<int>() != 1) {
+        return false;
+    }
+    if (!json.contains("entries") || !json["entries"].is_array()) {
+        return false;
+    }
+    const nlohmann::json* entries_json = &json["entries"];
 
     for (const auto& item : *entries_json) {
         Entry e;
@@ -93,19 +88,20 @@ bool Highscores::Load(const std::filesystem::path& path) {
     entries_.clear();
     std::ifstream ifs(path);
     if (!ifs) {
-        return false;
+        return Save(path);
     }
 
-    nlohmann::json json;
-    try {
-        ifs >> json;
-    } catch (const std::exception& ex) {
-        SDL_Log("Failed to parse highscores JSON at %s: %s", path.string().c_str(), ex.what());
+    const std::string contents((std::istreambuf_iterator<char>(ifs)),
+                               std::istreambuf_iterator<char>());
+    nlohmann::json json = nlohmann::json::parse(contents, nullptr, false);
+    if (json.is_discarded()) {
+        SDL_Log("Failed to parse highscores JSON at %s", path.string().c_str());
         entries_.clear();
         return true;
     }
 
     if (!ParseEntries(json, entries_)) {
+        SDL_Log("Invalid highscores schema at %s", path.string().c_str());
         entries_.clear();
     }
 
