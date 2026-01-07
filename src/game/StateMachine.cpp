@@ -46,4 +46,8 @@ void StateMachine::GameOver() {
   screen_ = Screen::GameOver;
 }
 
+void StateMachine::NameEntry() {
+  screen_ = Screen::NameEntry;
+}
+
 }  // namespace snake::game

@@ -2,11 +2,11 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cctype>
 #include <cstdio>
 #include <ctime>
 #include <fstream>
 
-#include "io/Config.h"
 #include "nlohmann/json.hpp"
 
 namespace snake::io {
@@ -14,12 +14,12 @@ namespace snake::io {
 namespace {
 constexpr std::size_t kMaxEntries = 10;
 
-bool ParseEntries(const nlohmann::json& json, std::vector<HighscoreEntry>& out) {
-    std::vector<HighscoreEntry> parsed;
+bool ParseEntries(const nlohmann::json& json, std::vector<Entry>& out) {
+    std::vector<Entry> parsed;
 
     if (json.is_array()) {
         for (const auto& item : json) {
-            HighscoreEntry e;
+            Entry e;
             if (item.contains("name") && item["name"].is_string()) {
                 e.name = item["name"].get<std::string>();
             }
@@ -39,6 +39,37 @@ bool ParseEntries(const nlohmann::json& json, std::vector<HighscoreEntry>& out) 
 
     out = std::move(parsed);
     return true;
+}
+
+bool IsAllowedNameChar(char c) {
+    return std::isalnum(static_cast<unsigned char>(c)) || c == ' ' || c == '_' || c == '-';
+}
+
+std::string SanitizeEntryName(std::string name) {
+    name.erase(std::remove_if(name.begin(), name.end(), [](char c) { return !IsAllowedNameChar(c); }),
+               name.end());
+    const std::size_t max_len = 12;
+    if (name.size() > max_len) {
+        name.resize(max_len);
+    }
+    if (name.empty()) {
+        name = "Player";
+    }
+    return name;
+}
+
+bool EntrySortDesc(const Entry& a, const Entry& b) {
+    if (a.score != b.score) {
+        return a.score > b.score;
+    }
+    return a.achieved_at < b.achieved_at;
+}
+
+void SortAndTrim(std::vector<Entry>& entries) {
+    std::sort(entries.begin(), entries.end(), EntrySortDesc);
+    if (entries.size() > kMaxEntries) {
+        entries.resize(kMaxEntries);
+    }
 }
 
 }  // namespace
@@ -61,14 +92,9 @@ bool Highscores::Load(const std::filesystem::path& path) {
 
     // sanitize names
     for (auto& e : entries_) {
-        e.name = SanitizePlayerName(std::move(e.name));
+        e.name = SanitizeEntryName(std::move(e.name));
     }
-    std::sort(entries_.begin(), entries_.end(), [](const auto& a, const auto& b) {
-        return a.score > b.score;
-    });
-    if (entries_.size() > kMaxEntries) {
-        entries_.resize(kMaxEntries);
-    }
+    SortAndTrim(entries_);
     return true;
 }
 
@@ -79,12 +105,13 @@ bool Highscores::Save(const std::filesystem::path& path) const {
         return false;
     }
 
-    nlohmann::json json = nlohmann::json::array();
+    nlohmann::json entries = nlohmann::json::array();
     for (const auto& e : entries_) {
-        json.push_back(
+        entries.push_back(
             {{"name", e.name}, {"score", e.score}, {"achieved_at", e.achieved_at}});
     }
 
+    nlohmann::json json{{"version", 1}, {"entries", entries}};
     ofs << json.dump(2);
     ofs.close();
     if (!ofs) {
@@ -103,32 +130,26 @@ bool Highscores::Save(const std::filesystem::path& path) const {
     return true;
 }
 
-const std::vector<HighscoreEntry>& Highscores::Entries() const {
+const std::vector<Entry>& Highscores::Entries() const {
     return entries_;
 }
 
-bool Highscores::TryAdd(std::string name, int score, std::string achieved_at_iso_utc) {
-    name = SanitizePlayerName(std::move(name));
-
-    HighscoreEntry entry{std::move(name), score, std::move(achieved_at_iso_utc)};
-    entries_.push_back(entry);
-    std::sort(entries_.begin(), entries_.end(), [](const auto& a, const auto& b) {
-        return a.score > b.score;
-    });
-
-    bool inserted = entries_.size() <= kMaxEntries;
-    if (entries_.size() > kMaxEntries) {
-        inserted = false;
-        entries_.resize(kMaxEntries);
-        for (const auto& e : entries_) {
-            if (e.name == entry.name && e.score == entry.score && e.achieved_at == entry.achieved_at) {
-                inserted = true;
-                break;
-            }
-        }
+bool Highscores::Qualifies(int score) const {
+    if (entries_.size() < kMaxEntries) {
+        return true;
     }
+    return score > entries_.back().score;
+}
 
-    return inserted;
+bool Highscores::TryInsert(const Entry& entry) {
+    Entry sanitized = entry;
+    sanitized.name = SanitizeEntryName(std::move(sanitized.name));
+    entries_.push_back(sanitized);
+    SortAndTrim(entries_);
+
+    return std::any_of(entries_.begin(), entries_.end(), [&](const Entry& e) {
+        return e.name == sanitized.name && e.score == sanitized.score && e.achieved_at == sanitized.achieved_at;
+    });
 }
 
 void Highscores::Clear() {

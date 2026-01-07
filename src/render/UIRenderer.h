@@ -36,8 +36,9 @@ struct UiFrameData {
     std::string lua_error;
     std::string game_over_reason;
     int final_score = 0;
+    std::string name_entry;
     const snake::io::ConfigData* config = nullptr;
-    const std::vector<snake::io::HighscoreEntry>* highscores = nullptr;
+    const std::vector<snake::io::Entry>* highscores = nullptr;
     std::vector<std::string> menu_items;
     std::vector<std::pair<std::string, std::string>> option_items;
 };
@@ -59,6 +60,7 @@ private:
     void RenderHighscores(SDL_Renderer* r, const Layout& l, const UiFrameData& ui);
     void RenderPaused(SDL_Renderer* r, const Layout& l);
     void RenderGameOver(SDL_Renderer* r, const Layout& l, const UiFrameData& ui);
+    void RenderNameEntry(SDL_Renderer* r, const Layout& l, const UiFrameData& ui);
 };
 
 }  // namespace snake::render

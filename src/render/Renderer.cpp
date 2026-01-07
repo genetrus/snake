@@ -203,7 +203,8 @@ void Renderer::RenderFrame(SDL_Renderer* r,
     SDL_Rect board_rect{origin.x, origin.y, board_w * tile_px, board_h * tile_px};
     if (ui_frame.screen == snake::game::Screen::MainMenu ||
         ui_frame.screen == snake::game::Screen::Options ||
-        ui_frame.screen == snake::game::Screen::Highscores) {
+        ui_frame.screen == snake::game::Screen::Highscores ||
+        ui_frame.screen == snake::game::Screen::NameEntry) {
         RenderFallbackRect(r, SDL_Rect{0, 0, virtual_w, virtual_h}, SDL_Color{8, 8, 12, 255});
     } else {
         RenderFallbackRect(r, board_rect, SDL_Color{32, 32, 42, 255});
