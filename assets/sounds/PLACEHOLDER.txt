@@ -1,1 +1,8 @@
-Placeholder sound assets will be added here.
+eat.wav
+bonus_score.wav
+bonus_slow.wav
+menu_click.wav
+pause_on.wav
+pause_off.wav
+game_over.wav
+restart.wav
