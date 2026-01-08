@@ -10,6 +10,7 @@
 #include "core/Input.h"
 #include "core/Time.h"
 #include "audio/AudioSystem.h"
+#include "audio/SFX.h"
 #include "game/Game.h"
 #include "game/StateMachine.h"
 #include "lua/LuaRuntime.h"
@@ -103,11 +104,14 @@ private:
     bool has_pending_highscore_ = false;
     bool name_entry_active_ = false;
     bool debug_text_overlay_ = false;
+    bool debug_audio_overlay_ = false;
 
     snake::render::Renderer renderer_impl_;
     AppLuaContext lua_ctx_{};
     double last_base_ticks_per_sec_ = 10.0;
     std::string renderer_error_text_;
     std::string config_error_text_;
+
+    snake::audio::SFX sfx_;
 };
 }  // namespace snake::core

@@ -9,9 +9,11 @@
 #include <functional>
 #include <stdexcept>
 #include <string_view>
+#include <vector>
 #include <lua.hpp>
 
 #include "audio/AudioSystem.h"
+#include "audio/SFX.h"
 #include "io/Paths.h"
 #include "io/Highscores.h"
 #include "lua/Bindings.h"
@@ -55,6 +57,8 @@ int App::Run() {
         lua_ctx_.audio = &audio_;
 
         audio_.Init();
+        sfx_.SetAudioSystem(&audio_);
+        sfx_.LoadAll(snake::io::AssetsPath("sounds"));
         ApplyConfig();
         ApplyAudioSettings();
         ApplyImmediateSettings(active_config_.Data(), pending_config_.Data());
@@ -103,6 +107,9 @@ int App::Run() {
 
             if (input_.KeyPressed(SDLK_F9)) {
                 debug_text_overlay_ = !debug_text_overlay_;
+            }
+            if (input_.KeyPressed(SDLK_F10)) {
+                debug_audio_overlay_ = !debug_audio_overlay_;
             }
 
             HandleMenus(running);
@@ -188,6 +195,7 @@ void App::CreateWindowAndRenderer(bool want_vsync) {
 }
 
 void App::ShutdownSDL() {
+    sfx_.Reset();
     audio_.Shutdown();
     renderer_impl_.Shutdown();
 
@@ -289,7 +297,36 @@ void App::RenderFrame() {
         {"Back", ""},
     };
 
-    renderer_impl_.RenderFrame(renderer_, window_w, window_h, rs, game_, time_.Now(), overlay_error_text, debug_text_overlay_, ui);
+    const auto& audio_diag = audio_.Diagnostics();
+    std::vector<std::string> audio_lines;
+    if (debug_audio_overlay_) {
+        const bool audio_ok = audio_diag.device_opened && audio_.IsEnabled();
+        const std::string status = audio_ok ? "AUDIO: OK" : "AUDIO: FAIL";
+        audio_lines.push_back(status);
+        audio_lines.push_back(std::string("Device opened: ") + (audio_diag.device_opened ? "yes" : "no"));
+        audio_lines.push_back(std::string("Enabled: ") + (active_config_.Data().audio.enabled ? "yes" : "no"));
+        audio_lines.push_back("Master volume: " + std::to_string(active_config_.Data().audio.master_volume));
+        audio_lines.push_back("SFX volume: " + std::to_string(active_config_.Data().audio.sfx_volume));
+        const std::string loaded_line =
+            "Loaded sounds: " + std::to_string(sfx_.LoadedCount()) + "/" + std::to_string(sfx_.ExpectedCount()) +
+            " (fallback " + std::to_string(sfx_.FallbackCount()) + ")";
+        audio_lines.push_back(loaded_line);
+        const std::string last_error = !sfx_.LastError().empty() ? sfx_.LastError() : audio_diag.last_error;
+        audio_lines.push_back(std::string("Last error: ") + (last_error.empty() ? "None" : last_error));
+        audio_lines.push_back(std::string("Last play: ") + (sfx_.LastPlay().empty() ? "None" : sfx_.LastPlay()));
+    }
+
+    renderer_impl_.RenderFrame(renderer_,
+                               window_w,
+                               window_h,
+                               rs,
+                               game_,
+                               time_.Now(),
+                               overlay_error_text,
+                               debug_text_overlay_,
+                               debug_audio_overlay_,
+                               audio_lines,
+                               ui);
 }
 
 bool App::RecreateRenderer(bool want_vsync) {
@@ -378,6 +415,8 @@ void App::HandleMenus(bool& running) {
     const auto highscores_path = snake::io::UserPath("highscores.json");
 
     auto start_round = [&]() {
+        SDL_Log("Audio event: restart");
+        sfx_.Play(snake::audio::SfxId::MenuClick, "restart");
         ApplyRoundSettingsOnRestart();
         ApplyConfig();
         game_.ResetAll();
@@ -410,6 +449,8 @@ void App::HandleMenus(bool& running) {
                 menu_index_ = (menu_index_ + 1) % static_cast<int>(menu_items_.size());
             }
             if (confirm_pressed) {
+                SDL_Log("Audio event: menu_confirm");
+                sfx_.Play(snake::audio::SfxId::MenuClick, "menu_confirm");
                 switch (menu_index_) {
                     case 0:
                         start_round();
@@ -428,6 +469,8 @@ void App::HandleMenus(bool& running) {
                 }
             }
             if (menu_pressed) {
+                SDL_Log("Audio event: menu_exit");
+                sfx_.Play(snake::audio::SfxId::MenuClick, "menu_exit");
                 running = false;
             }
             break;
@@ -435,11 +478,15 @@ void App::HandleMenus(bool& running) {
         case snake::game::Screen::Options:
             HandleOptionsInput();
             if (!rebinding_ && menu_pressed) {
+                SDL_Log("Audio event: menu_back");
+                sfx_.Play(snake::audio::SfxId::MenuClick, "menu_back");
                 sm_.BackToMenu();
             }
             break;
         case snake::game::Screen::Highscores:
             if (menu_pressed) {
+                SDL_Log("Audio event: menu_back");
+                sfx_.Play(snake::audio::SfxId::MenuClick, "menu_back");
                 sm_.BackToMenu();
             }
             break;
@@ -447,11 +494,15 @@ void App::HandleMenus(bool& running) {
             game_.HandleInput(input_);
             if (pause_pressed) {
                 sm_.Pause();
+                SDL_Log("Audio event: pause_on");
+                sfx_.Play(snake::audio::SfxId::PauseOn, "pause_on");
             }
             if (restart_pressed) {
                 start_round();
             }
             if (menu_pressed) {
+                SDL_Log("Audio event: menu_to_main");
+                sfx_.Play(snake::audio::SfxId::MenuClick, "menu_to_main");
                 sm_.BackToMenu();
                 game_.ResetAll();
             }
@@ -460,20 +511,28 @@ void App::HandleMenus(bool& running) {
         case snake::game::Screen::Paused:
             if (pause_pressed) {
                 sm_.Resume();
+                SDL_Log("Audio event: pause_off");
+                sfx_.Play(snake::audio::SfxId::PauseOff, "pause_off");
             }
             if (restart_pressed) {
                 start_round();
             }
             if (menu_pressed) {
+                SDL_Log("Audio event: menu_to_main");
+                sfx_.Play(snake::audio::SfxId::MenuClick, "menu_to_main");
                 sm_.BackToMenu();
                 game_.ResetAll();
             }
             break;
         case snake::game::Screen::GameOver:
             if (restart_pressed || confirm_pressed) {
+                SDL_Log("Audio event: restart");
+                sfx_.Play(snake::audio::SfxId::MenuClick, "restart");
                 start_round();
             }
             if (menu_pressed) {
+                SDL_Log("Audio event: menu_to_main");
+                sfx_.Play(snake::audio::SfxId::MenuClick, "menu_to_main");
                 sm_.BackToMenu();
                 game_.ResetAll();
             }
@@ -513,9 +572,13 @@ void App::HandleMenus(bool& running) {
 
             if (events.food_eaten) {
                 lua_.CallWithCtxIfExists("on_food_eaten", &lua_ctx_);
+                SDL_Log("Audio event: food_eaten");
+                sfx_.Play(snake::audio::SfxId::Eat, "food_eaten");
             }
             if (events.bonus_picked) {
                 lua_.CallWithCtxIfExists("on_bonus_picked", &lua_ctx_, events.bonus_type);
+                SDL_Log("Audio event: bonus_picked (%s)", events.bonus_type.c_str());
+                sfx_.Play(snake::audio::SfxId::Eat, "bonus_picked");
             }
             if (!game_.IsGameOver()) {
                 lua_.CallWithCtxIfExists("on_tick_end", &lua_ctx_);
@@ -535,6 +598,8 @@ void App::HandleMenus(bool& running) {
                 EnterNameEntry(score);
             }
             lua_.CallWithCtxIfExists("on_game_over", &lua_ctx_, game_.GameOverReason());
+            SDL_Log("Audio event: game_over (%s)", std::string(game_.GameOverReason()).c_str());
+            sfx_.Play(snake::audio::SfxId::GameOver, "game_over");
         }
     } else {
         time_.UpdateFrame();
@@ -962,6 +1027,11 @@ void App::ApplyAudioSettings() {
     audio_.SetEnabled(active_config_.Data().audio.enabled);
     audio_.SetMasterVolume(active_config_.Data().audio.master_volume);
     audio_.SetSfxVolume(active_config_.Data().audio.sfx_volume);
+    sfx_.ApplyVolume();
+    SDL_Log("Audio settings: enabled=%s master=%d sfx=%d",
+            active_config_.Data().audio.enabled ? "true" : "false",
+            active_config_.Data().audio.master_volume,
+            active_config_.Data().audio.sfx_volume);
 }
 
 void App::ApplyControlSettings() {
