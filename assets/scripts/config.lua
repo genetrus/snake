@@ -1,46 +1,41 @@
 return {
   window = {
-    width = 800,
-    height = 800,
-    fullscreen_desktop = false,
-    vsync = true,
+    width = 1280, -- default window width
+    height = 720, -- default window height
+    fullscreen_desktop = false, -- use borderless fullscreen
+    vsync = true, -- enable vsync by default
   },
 
   grid = {
-    board_w = 20,
-    board_h = 20,
-    tile_size = 32,
-    wrap_mode = false,
+    board_w = 20, -- tiles wide
+    board_h = 20, -- tiles high
+    tile_size = 32, -- pixels per tile
+    wrap_mode = false, -- wrap around edges
   },
 
-  audio = {
-    enabled = true,
-    master_volume = 96, -- 0..128
-    sfx_volume = 96,    -- 0..128
+  sound = {
+    master = 0.8, -- master volume (0.0 - 1.0)
+    sfx = 0.8, -- effects volume
+    music = 0.7, -- music volume
+  },
+
+  keybinds = {
+    up = { "UP", "W" },
+    down = { "DOWN", "S" },
+    left = { "LEFT", "A" },
+    right = { "RIGHT", "D" },
+
+    pause = { "P", "SPACE" },
+    restart = { "R", "F5" },
+    menu = { "ESCAPE", "F2" },
+    confirm = { "ENTER", "SPACE" },
   },
 
   ui = {
     panel_mode = "auto", -- "auto" | "top" | "right"
   },
 
-  keybinds = {
-    up      = { "UP", "W" },
-    down    = { "DOWN", "S" },
-    left    = { "LEFT", "A" },
-    right   = { "RIGHT", "D" },
-
-    pause   = { "P", "P" },
-    restart = { "R", "R" },
-    menu    = { "ESCAPE", "ESCAPE" },
-    confirm = { "ENTER", "ENTER" },
-  },
-
   gameplay = {
-    food_score = 10,
-    bonus_score_score = 50,
-    slow_multiplier = 0.70,
-    slow_duration_sec = 6.0,
-    always_one_food = true,
-    max_simultaneous_bonuses = 2,
+    food_score = 10, -- points per food
   },
 }
