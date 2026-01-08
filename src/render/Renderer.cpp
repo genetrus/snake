@@ -327,8 +327,10 @@ void Renderer::RenderFrame(SDL_Renderer* r,
         place_right = true;  // legacy wide preference
     }
 
-    const int virtual_w = place_right ? board_px_w + panel_px_w : board_px_w;
-    const int virtual_h = place_right ? std::max(board_px_h, panel_px_h) : board_px_h + panel_px_h;
+    const bool panel_visible = ui_frame.debug_panel_visible;
+    const int virtual_w = panel_visible ? (place_right ? board_px_w + panel_px_w : board_px_w) : board_px_w;
+    const int virtual_h = panel_visible ? (place_right ? std::max(board_px_h, panel_px_h) : board_px_h + panel_px_h)
+                                        : board_px_h;
 
     const bool have_fb = EnsureFramebuffer(r, virtual_w, virtual_h);
 
@@ -340,12 +342,17 @@ void Renderer::RenderFrame(SDL_Renderer* r,
 
     SDL_Rect panel_rect{};
     SDL_Rect play_rect{};
-    if (place_right) {
-        panel_rect = SDL_Rect{board_px_w, 0, panel_px_w, std::max(panel_px_h, board_px_h)};
-        play_rect = SDL_Rect{0, 0, board_px_w, board_px_h};
+    if (panel_visible) {
+        if (place_right) {
+            panel_rect = SDL_Rect{board_px_w, 0, panel_px_w, std::max(panel_px_h, board_px_h)};
+            play_rect = SDL_Rect{0, 0, board_px_w, board_px_h};
+        } else {
+            panel_rect = SDL_Rect{0, 0, board_px_w, panel_px_h};
+            play_rect = SDL_Rect{0, panel_px_h, board_px_w, board_px_h};
+        }
     } else {
-        panel_rect = SDL_Rect{0, 0, board_px_w, panel_px_h};
-        play_rect = SDL_Rect{0, panel_px_h, board_px_w, board_px_h};
+        panel_rect = SDL_Rect{0, 0, 0, 0};
+        play_rect = SDL_Rect{0, 0, board_px_w, board_px_h};
     }
 
     panel_rect = ClampRectToNonNegative(panel_rect);
@@ -440,7 +447,7 @@ void Renderer::RenderFrame(SDL_Renderer* r,
     layout.panel_h = panel_rect.h;
     layout.panel_rect = panel_rect;
     layout.play_rect = play_rect;
-    layout.panel_on_right = place_right;
+    layout.panel_on_right = place_right && panel_visible;
 
     ui_.Render(r, layout, game, now_seconds, ui_frame);
 

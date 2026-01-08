@@ -58,6 +58,11 @@
 - UI панель (счёт/статусы/подсказки) располагается **вне игрового поля**.
 - Позиция панели — **опция**. Default: **auto**.
 
+### 4.6 HUD and Highscores layout
+- Debug panel toggle: **F1** (default hidden). When hidden, the board uses the full viewport width.
+- In-game HUD: compact overlay in the **top-left of the gameplay viewport** showing **Score**, **Speed (tps)**, and **Slow timer**.
+- Highscores screen: centered card/table with columns **Rank | Name | Score | Date**, fixed column widths, and aligned text.
+
 ## 5. Тайминг
 - Игровая логика: **fixed tick**.
 - Базовая частота задаётся в Lua-функции `speed_ticks_per_sec(score, config)` (ticks/sec). При ошибке Lua остаётся последнее успешное значение (фолбэк на старте — **10 tps**).
