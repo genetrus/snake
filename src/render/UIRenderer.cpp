@@ -170,16 +170,31 @@ void UIRenderer::RenderOptions(SDL_Renderer* r, const Layout& l, const UiFrameDa
     SDL_RenderFillRect(r, &backdrop);
 
     const int start_x = l.padding * 2;
-    int y = l.padding * 2;
     const int row_h = 24;
     const int gap = 8;
+    const int title_h = row_h;
+    const int footer_lines = 1 + (ui.pending_round_restart ? 1 : 0);
+    const int footer_h = footer_lines * row_h + (footer_lines - 1) * gap;
+    const int list_top = l.padding * 2 + title_h + gap;
+    const int list_bottom = l.window_h - l.padding * 2 - footer_h - gap;
+    const int list_area_h = std::max(0, list_bottom - list_top);
+    const int item_h = row_h + gap;
+    const int visible_rows = std::max(1, list_area_h / item_h);
+    const int max_scroll = std::max(0, static_cast<int>(ui.option_items.size()) - visible_rows);
+    const int center_row = visible_rows / 2;
+    const int scroll_index =
+        std::clamp(ui.options_index - center_row, 0, max_scroll);
+    int y = l.padding * 2;
 
     DrawTextLine(r, start_x, y, "Options");
-    y += row_h + gap;
+    y = list_top;
 
-    for (std::size_t i = 0; i < ui.option_items.size(); ++i) {
+    const int end_index =
+        std::min(static_cast<int>(ui.option_items.size()),
+                 scroll_index + visible_rows);
+    for (int i = scroll_index; i < end_index; ++i) {
         const auto& [label, value] = ui.option_items[i];
-        const bool sel = static_cast<int>(i) == ui.options_index;
+        const bool sel = i == ui.options_index;
         if (sel) {
             SDL_Rect hilite{start_x - 6, y - 2, l.window_w - start_x * 2, row_h + 4};
             SDL_SetRenderDrawColor(r, 40, 60, 80, 180);
@@ -187,7 +202,7 @@ void UIRenderer::RenderOptions(SDL_Renderer* r, const Layout& l, const UiFrameDa
         }
         DrawTextLine(r, start_x, y, label);
         DrawTextLine(r, start_x + 260, y, value);
-        y += row_h + gap;
+        y += item_h;
     }
 
     if (ui.rebinding) {
