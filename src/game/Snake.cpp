@@ -29,7 +29,7 @@ void Snake::Reset(const Board& b) {
     const auto clamp_y = [max_y](int y) { return std::clamp(y, 0, max_y); };
 
     if (w >= 3) {
-        const int head_x = std::clamp(cx, 2, max_x);
+        const int head_x = (w >= 5) ? cx : std::clamp(cx, 2, max_x);
         const int head_y = clamp_y(cy);
         body_.push_back(Pos{head_x, head_y});
         body_.push_back(Pos{head_x - 1, head_y});

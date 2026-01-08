@@ -602,7 +602,7 @@ void App::HandleMenus(bool& running) {
             sfx_.Play(snake::audio::SfxId::GameOver, "game_over");
         }
     } else {
-        time_.UpdateFrame();
+        time_.UpdateFrameNoAccum();
     }
 }
 

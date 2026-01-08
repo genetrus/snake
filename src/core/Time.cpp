@@ -31,6 +31,20 @@ void Time::UpdateFrame() {
     accumulator_ += frame_dt_;
 }
 
+void Time::UpdateFrameNoAccum() {
+    const uint64_t current = SDL_GetPerformanceCounter();
+    const uint64_t delta = current - last_counter_;
+    frame_dt_ = static_cast<double>(delta) * frequency_inv_;
+    last_counter_ = current;
+
+    constexpr double kMaxFrameDt = 0.25;  // avoid huge dt after breakpoint
+    if (frame_dt_ < 0.0) {
+        frame_dt_ = 0.0;
+    } else if (frame_dt_ > kMaxFrameDt) {
+        frame_dt_ = kMaxFrameDt;
+    }
+}
+
 double Time::FrameDt() const {
     return frame_dt_;
 }

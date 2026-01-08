@@ -1,8 +1,9 @@
 #include "game/Game.h"
 
 #include <SDL.h>
-#include <random>
 #include <optional>
+#include <random>
+#include <sstream>
 #include <utility>
 
 namespace snake::game {
@@ -18,6 +19,39 @@ void Game::ResetAll() {
     effects_.Reset();
     tick_events_ = {};
     spawner_.EnsureFood(board_, snake_, rng_);
+
+    std::ostringstream segments;
+    segments << "[";
+    const auto& body = snake_.Body();
+    for (std::size_t i = 0; i < body.size(); ++i) {
+        segments << "(" << body[i].x << "," << body[i].y << ")";
+        if (i + 1 < body.size()) {
+            segments << ", ";
+        }
+    }
+    segments << "]";
+
+    const char* dir = "right";
+    switch (snake_.Direction()) {
+        case Dir::Up:
+            dir = "up";
+            break;
+        case Dir::Down:
+            dir = "down";
+            break;
+        case Dir::Left:
+            dir = "left";
+            break;
+        case Dir::Right:
+            dir = "right";
+            break;
+        default:
+            dir = "unknown";
+            break;
+    }
+
+    SDL_Log("Round start: board=%dx%d segments=%s dir=%s wrap=%s",
+            board_.W(), board_.H(), segments.str().c_str(), dir, wrap_mode_ ? "true" : "false");
 }
 
 void Game::ResetRound() {
