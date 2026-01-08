@@ -111,6 +111,9 @@ int App::Run() {
             if (input_.KeyPressed(SDLK_F10)) {
                 debug_audio_overlay_ = !debug_audio_overlay_;
             }
+            if (input_.KeyPressed(SDLK_F1)) {
+                debug_panel_visible_ = !debug_panel_visible_;
+            }
 
             HandleMenus(running);
 
@@ -260,6 +263,8 @@ void App::RenderFrame() {
     ui.config = &pending_config_.Data();
     ui.highscores = &highscores_.Entries();
     ui.menu_items = menu_items_;
+    ui.debug_panel_visible = debug_panel_visible_;
+    ui.effective_tps = last_effective_ticks_per_sec_;
 
     auto bool_label = [](bool on) { return on ? "On" : "Off"; };
     auto wrap_label = [](bool wrap) { return wrap ? "On" : "Off"; };
@@ -566,6 +571,7 @@ void App::HandleMenus(bool& running) {
         const double effective_tps = base_tps * slow_multiplier;
         const double tick_dt = effective_tps > 0.0 ? 1.0 / effective_tps : 0.1;
         time_.SetTickDt(tick_dt);
+        last_effective_ticks_per_sec_ = effective_tps;
 
         int ticks_done = 0;
         while (time_.ConsumeTick() && ticks_done < kMaxTicksPerFrame) {
