@@ -121,12 +121,99 @@ void Renderer::DestroyFramebuffer() {
     fb_h_ = 0;
 }
 
+bool Renderer::LoadSprite(SDL_Renderer* r,
+                          const std::filesystem::path& path,
+                          SpriteTexture& sprite,
+                          std::string_view label) {
+    if (r == nullptr) {
+        return false;
+    }
+
+    if (!std::filesystem::exists(path)) {
+        SDL_Log("Missing sprite '%.*s' at %s", static_cast<int>(label.size()), label.data(), path.string().c_str());
+        return false;
+    }
+
+    SDL_Surface* surface = IMG_Load(path.string().c_str());
+    if (surface == nullptr) {
+        SDL_Log("Failed to load sprite '%.*s' (%s): %s",
+                static_cast<int>(label.size()),
+                label.data(),
+                path.string().c_str(),
+                IMG_GetError());
+        return false;
+    }
+
+    SDL_Texture* tex = SDL_CreateTextureFromSurface(r, surface);
+    if (tex == nullptr) {
+        SDL_Log("Failed to create texture for '%.*s': %s", static_cast<int>(label.size()), label.data(), SDL_GetError());
+        SDL_FreeSurface(surface);
+        return false;
+    }
+
+    sprite.texture = tex;
+    sprite.w = surface->w;
+    sprite.h = surface->h;
+    SDL_FreeSurface(surface);
+
+    SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
+#if SNAKE_HAS_SDL_SCALE_MODE
+    SDL_SetTextureScaleMode(tex, SDL_ScaleModeNearest);
+#else
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
+#endif
+
+    return true;
+}
+
+void Renderer::ResetSprites() {
+    auto destroy = [](SpriteTexture& sprite) {
+        if (sprite.texture != nullptr) {
+            SDL_DestroyTexture(sprite.texture);
+            sprite.texture = nullptr;
+        }
+        sprite.w = 0;
+        sprite.h = 0;
+    };
+
+    destroy(sprites_.snake_head);
+    destroy(sprites_.snake_body);
+    destroy(sprites_.food);
+    destroy(sprites_.bonus_score);
+    destroy(sprites_.bonus_slow);
+}
+
 bool Renderer::Init(SDL_Renderer* r) {
     bool ok = true;
+    sprite_error_text_.clear();
+    ResetSprites();
 
-    const auto atlas_path = snake::io::AssetsPath("sprites/atlas.png");
-    if (std::filesystem::exists(atlas_path)) {
-        ok = atlas_.Load(r, atlas_path) && ok;
+    std::vector<std::string> missing;
+    auto load_sprite = [&](SpriteTexture& sprite, std::string_view label, std::string_view rel_path) {
+        const auto path = snake::io::AssetsPath(std::string(rel_path));
+        if (!LoadSprite(r, path, sprite, label)) {
+            missing.emplace_back(label);
+        }
+    };
+
+    load_sprite(sprites_.snake_head, "snake_head", "sprites/snake_head.png");
+    load_sprite(sprites_.snake_body, "snake_body", "sprites/snake_body.png");
+    load_sprite(sprites_.food, "food", "sprites/food.png");
+    load_sprite(sprites_.bonus_score, "bonus_score", "sprites/bonus_score.png");
+    load_sprite(sprites_.bonus_slow, "bonus_slow", "sprites/bonus_slow.png");
+
+    if (!missing.empty()) {
+        sprite_error_text_ = "Missing sprite";
+        if (missing.size() > 1) {
+            sprite_error_text_.append("s");
+        }
+        sprite_error_text_.append(": ");
+        for (std::size_t i = 0; i < missing.size(); ++i) {
+            if (i > 0) {
+                sprite_error_text_.append(", ");
+            }
+            sprite_error_text_.append(missing[i]);
+        }
     }
 
     std::vector<std::filesystem::path> font_paths;
@@ -149,7 +236,8 @@ bool Renderer::Init(SDL_Renderer* r) {
 void Renderer::Shutdown() {
     DestroyFramebuffer();
     text_renderer_.Reset();
-    atlas_.SetTexture(nullptr);
+    ResetSprites();
+    sprite_error_text_.clear();
     ui_.SetTextRenderer(nullptr);
 }
 
@@ -166,6 +254,14 @@ void Renderer::RenderFrame(SDL_Renderer* r,
                            const snake::render::UiFrameData& ui_frame) {
     if (r == nullptr) {
         return;
+    }
+
+    std::string combined_error_text = overlay_error_text;
+    if (!sprite_error_text_.empty()) {
+        if (!combined_error_text.empty()) {
+            combined_error_text.append(" | ");
+        }
+        combined_error_text.append(sprite_error_text_);
     }
 
     const std::string mode = NormalizePanelMode(rs.panel_mode);
@@ -233,42 +329,35 @@ void Renderer::RenderFrame(SDL_Renderer* r,
         SDL_RenderDrawLine(r, origin.x, py, origin.x + board_w * tile_px, py);
     }
 
-    SDL_Texture* atlas_tex = atlas_.Texture();
-
     if (game.GetSpawner().HasFood()) {
         const snake::game::Pos food_pos = game.GetSpawner().FoodPos();
         const double food_scale = food_pulse_.Eval(now_seconds);
         const int food_size = static_cast<int>(tile_px * food_scale);
         SDL_Rect food_dst = TileRect(origin, tile_px, food_pos, food_size);
-        if (atlas_tex != nullptr) {
-            if (const SDL_Rect* src = atlas_.Get("food")) {
-                SDL_Rect dst = food_dst;
-                dst.w = tile_px;
-                dst.h = tile_px;
-                SDL_RenderCopy(r, atlas_tex, src, &dst);
-            }
-        }
-        if (atlas_tex == nullptr || atlas_.Get("food") == nullptr) {
+        if (sprites_.food.texture != nullptr) {
+            SDL_Rect dst = food_dst;
+            dst.w = tile_px;
+            dst.h = tile_px;
+            SDL_RenderCopy(r, sprites_.food.texture, nullptr, &dst);
+        } else {
             RenderFallbackRect(r, food_dst, SDL_Color{200, 80, 80, 255});
         }
     }
 
     for (const auto& bonus : game.GetSpawner().Bonuses()) {
         SDL_Rect dst = TileRect(origin, tile_px, bonus.pos);
-        const SDL_Rect* src = nullptr;
-        if (atlas_tex != nullptr) {
-            switch (bonus.type) {
-                case snake::game::BonusType::Score:
-                    src = atlas_.Get("bonus_score");
-                    break;
-                case snake::game::BonusType::Slow:
-                    src = atlas_.Get("bonus_slow");
-                    break;
-            }
+        SDL_Texture* bonus_tex = nullptr;
+        switch (bonus.type) {
+            case snake::game::BonusType::Score:
+                bonus_tex = sprites_.bonus_score.texture;
+                break;
+            case snake::game::BonusType::Slow:
+                bonus_tex = sprites_.bonus_slow.texture;
+                break;
         }
 
-        if (atlas_tex != nullptr && src != nullptr) {
-            SDL_RenderCopy(r, atlas_tex, src, &dst);
+        if (bonus_tex != nullptr) {
+            SDL_RenderCopy(r, bonus_tex, nullptr, &dst);
         } else {
             RenderFallbackRect(r, dst, SDL_Color{80, 200, 120, 255});
         }
@@ -279,31 +368,9 @@ void Renderer::RenderFrame(SDL_Renderer* r,
     for (std::size_t i = 0; i < body.size(); ++i) {
         const bool is_head = i == 0;
         SDL_Rect dst = TileRect(origin, tile_px, body[i]);
-
-        const SDL_Rect* src = nullptr;
-        if (atlas_tex != nullptr) {
-            if (is_head) {
-                switch (snake.Direction()) {
-                    case snake::game::Dir::Up:
-                        src = atlas_.Get("snake_head_up");
-                        break;
-                    case snake::game::Dir::Down:
-                        src = atlas_.Get("snake_head_down");
-                        break;
-                    case snake::game::Dir::Left:
-                        src = atlas_.Get("snake_head_left");
-                        break;
-                    case snake::game::Dir::Right:
-                        src = atlas_.Get("snake_head_right");
-                        break;
-                }
-            } else {
-                src = atlas_.Get("snake_body");
-            }
-        }
-
-        if (atlas_tex != nullptr && src != nullptr) {
-            SDL_RenderCopy(r, atlas_tex, src, &dst);
+        SDL_Texture* tex = is_head ? sprites_.snake_head.texture : sprites_.snake_body.texture;
+        if (tex != nullptr) {
+            SDL_RenderCopy(r, tex, nullptr, &dst);
         } else {
             const SDL_Color color = is_head ? SDL_Color{240, 240, 120, 255} : SDL_Color{120, 200, 120, 255};
             RenderFallbackRect(r, dst, color);
@@ -315,14 +382,15 @@ void Renderer::RenderFrame(SDL_Renderer* r,
     layout.window_h = virtual_h;
     layout.panel_h = panel_rect.h;
     layout.panel_rect = panel_rect;
+    layout.play_rect = play_rect;
     layout.panel_on_right = place_right;
 
     ui_.Render(r, layout, game, now_seconds, ui_frame);
 
-    if (!overlay_error_text.empty()) {
+    if (!combined_error_text.empty()) {
         const int padding = 8;
         SDL_Color text_color{255, 200, 200, 255};
-        const auto metrics = text_renderer_.MeasureText(overlay_error_text, 16);
+        const auto metrics = text_renderer_.MeasureText(combined_error_text, 16);
         int text_w = metrics.w;
         int text_h = metrics.h;
 
@@ -334,7 +402,7 @@ void Renderer::RenderFrame(SDL_Renderer* r,
         SDL_SetRenderDrawColor(r, 10, 10, 10, 190);
         SDL_RenderFillRect(r, &bg);
 
-        text_renderer_.DrawText(r, bg.x + padding, bg.y + padding, overlay_error_text, text_color, 16);
+        text_renderer_.DrawText(r, bg.x + padding, bg.y + padding, combined_error_text, text_color, 16);
 
         SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
     }

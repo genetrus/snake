@@ -2,6 +2,7 @@
 
 #include <SDL.h>
 
+#include <algorithm>
 #include <sstream>
 #include <string>
 
@@ -12,6 +13,35 @@
 #include "render/TextRenderer.h"
 
 namespace snake::render {
+namespace {
+
+std::string FormatIsoDate(std::string_view iso) {
+    if (iso.size() >= 16) {
+        std::string out(iso.substr(0, 16));
+        const auto pos = out.find('T');
+        if (pos != std::string::npos) {
+            out[pos] = ' ';
+        }
+        return out;
+    }
+    return std::string(iso);
+}
+
+int MeasureTextWidth(TextRenderer* renderer, std::string_view text, int size) {
+    if (renderer == nullptr) {
+        return static_cast<int>(text.size()) * 7;
+    }
+    return renderer->MeasureText(text, size).w;
+}
+
+int MeasureTextHeight(TextRenderer* renderer, int size) {
+    if (renderer == nullptr) {
+        return size;
+    }
+    return renderer->MeasureText("Ag", size).h;
+}
+
+}  // namespace
 
 void UIRenderer::SetTextRenderer(TextRenderer* text_renderer) {
     text_renderer_ = text_renderer;
@@ -177,23 +207,134 @@ void UIRenderer::RenderHighscores(SDL_Renderer* r, const Layout& l, const UiFram
     SDL_SetRenderDrawColor(r, 10, 10, 16, 230);
     SDL_RenderFillRect(r, &backdrop);
 
-    const int start_x = l.padding * 2;
-    int y = l.padding * 2;
-    DrawTextLine(r, start_x, y, "Highscores");
-    y += 30;
+    SDL_Rect content_rect = l.play_rect;
+    if (content_rect.w <= 0 || content_rect.h <= 0) {
+        content_rect = SDL_Rect{0, 0, l.window_w, l.window_h};
+    }
 
-    if (ui.highscores != nullptr) {
+    const int font_size = 16;
+    const int line_h = MeasureTextHeight(text_renderer_, font_size);
+    const int row_h = line_h + 6;
+    const int title_h = line_h + 8;
+    const int header_h = line_h + 6;
+    const int footer_h = line_h + 6;
+    const int inner_pad = 16;
+    const int section_gap = 10;
+    const int margin = 24;
+
+    const int avail_w = std::max(0, content_rect.w - margin * 2);
+    const int avail_h = std::max(0, content_rect.h - margin * 2);
+    int panel_w = std::min(avail_w, 600);
+    if (panel_w < 360) {
+        panel_w = avail_w;
+    }
+    panel_w = std::max(0, panel_w);
+
+    int rows = ui.highscores != nullptr ? static_cast<int>(ui.highscores->size()) : 0;
+    int base_h = inner_pad * 2 + title_h + header_h + footer_h + section_gap * 2;
+    if (rows == 0) {
+        rows = 1;
+    }
+    int max_rows = rows;
+    int total_h = base_h + rows * row_h;
+    if (avail_h > 0 && total_h > avail_h) {
+        max_rows = std::max(0, (avail_h - base_h) / row_h);
+        total_h = base_h + max_rows * row_h;
+    }
+    if (total_h <= 0) {
+        total_h = base_h + row_h;
+    }
+
+    const int panel_h = total_h;
+    const int panel_x = content_rect.x + std::max(0, (content_rect.w - panel_w) / 2);
+    const int panel_y = content_rect.y + std::max(0, (content_rect.h - panel_h) / 2);
+    SDL_Rect panel{panel_x, panel_y, panel_w, panel_h};
+
+    SDL_SetRenderDrawColor(r, 18, 18, 26, 220);
+    SDL_RenderFillRect(r, &panel);
+    SDL_SetRenderDrawColor(r, 70, 80, 96, 200);
+    SDL_RenderDrawRect(r, &panel);
+
+    int cursor_x = panel.x + inner_pad;
+    int cursor_y = panel.y + inner_pad;
+
+    DrawTextLine(r, cursor_x, cursor_y, "Highscores");
+    cursor_y += title_h + section_gap;
+
+    const int table_x = cursor_x;
+    const int table_w = panel.w - inner_pad * 2;
+    const int gap = 12;
+
+    int rank_w = std::max(24, MeasureTextWidth(text_renderer_, "#", font_size));
+    int score_w = std::max(70, MeasureTextWidth(text_renderer_, "Score", font_size) + 6);
+    int date_w = std::max(120, MeasureTextWidth(text_renderer_, "YYYY-MM-DD HH:MM", font_size));
+    int name_w = table_w - rank_w - score_w - date_w - gap * 3;
+    if (name_w < 120) {
+        const int target = 120;
+        int deficit = target - name_w;
+        const int reduce_date = std::min(deficit, date_w - 100);
+        date_w -= reduce_date;
+        deficit -= reduce_date;
+        const int reduce_score = std::min(deficit, score_w - 60);
+        score_w -= reduce_score;
+        name_w = table_w - rank_w - score_w - date_w - gap * 3;
+    }
+    name_w = std::max(0, name_w);
+
+    const int x_rank = table_x;
+    const int x_name = x_rank + rank_w + gap;
+    const int x_score = x_name + name_w + gap;
+    const int x_date = x_score + score_w + gap;
+
+    auto draw_cell = [&](int x, int y, int width, std::string_view text, bool right_align) {
+        int draw_x = x;
+        if (right_align) {
+            const int text_w = MeasureTextWidth(text_renderer_, text, font_size);
+            draw_x = x + std::max(0, width - text_w);
+        }
+        DrawTextLine(r, draw_x, y, text);
+    };
+
+    SDL_Rect header_bg{table_x - 4, cursor_y - 4, table_w + 8, header_h + 6};
+    SDL_SetRenderDrawColor(r, 30, 34, 48, 200);
+    SDL_RenderFillRect(r, &header_bg);
+    draw_cell(x_rank, cursor_y, rank_w, "#", true);
+    draw_cell(x_name, cursor_y, name_w, "Name", false);
+    draw_cell(x_score, cursor_y, score_w, "Score", true);
+    draw_cell(x_date, cursor_y, date_w, "Date", false);
+    cursor_y += header_h + section_gap;
+
+    if (ui.highscores == nullptr || ui.highscores->empty() || max_rows == 0) {
+        DrawTextLine(r, cursor_x, cursor_y, "No highscores yet.");
+        cursor_y += row_h;
+    } else {
         int rank = 1;
-        for (const auto& e : *ui.highscores) {
-            std::ostringstream line;
-            line << rank << ") " << e.name << "  " << e.score << "  " << e.achieved_at;
-            DrawTextLine(r, start_x, y, line.str());
-            y += 24;
+        const int rows_to_render = std::min(max_rows, static_cast<int>(ui.highscores->size()));
+        for (int i = 0; i < rows_to_render; ++i) {
+            const auto& e = ui.highscores->at(i);
+            SDL_Rect row_rect{table_x - 4, cursor_y - 2, table_w + 8, row_h + 2};
+            if (rank == 1) {
+                SDL_SetRenderDrawColor(r, 50, 70, 100, 210);
+                SDL_RenderFillRect(r, &row_rect);
+            } else if (rank <= 3) {
+                SDL_SetRenderDrawColor(r, 36, 48, 70, 190);
+                SDL_RenderFillRect(r, &row_rect);
+            } else if (i % 2 == 1) {
+                SDL_SetRenderDrawColor(r, 24, 24, 34, 180);
+                SDL_RenderFillRect(r, &row_rect);
+            }
+
+            draw_cell(x_rank, cursor_y, rank_w, std::to_string(rank), true);
+            draw_cell(x_name, cursor_y, name_w, e.name, false);
+            draw_cell(x_score, cursor_y, score_w, std::to_string(e.score), true);
+            draw_cell(x_date, cursor_y, date_w, FormatIsoDate(e.achieved_at), false);
+            cursor_y += row_h;
             ++rank;
         }
-    } else {
-        DrawTextLine(r, start_x, y, "No highscores yet.");
     }
+
+    cursor_y = panel.y + panel.h - inner_pad - footer_h;
+    DrawTextLine(r, cursor_x, cursor_y, "Enter: Select  |  Esc: Back");
 }
 
 void UIRenderer::RenderPaused(SDL_Renderer* r, const Layout& l) {
