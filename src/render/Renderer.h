@@ -6,7 +6,7 @@
 
 #include "game/Game.h"
 #include "render/Animation.h"
-#include "render/Font.h"
+#include "render/TextRenderer.h"
 #include "render/SpriteAtlas.h"
 #include "render/UIRenderer.h"
 
@@ -29,6 +29,7 @@ public:
                      const snake::game::Game& game,
                      double now_seconds,
                      const std::string& overlay_error_text,
+                     bool show_text_debug,
                      const snake::render::UiFrameData& ui_frame);
 
 private:
@@ -36,7 +37,7 @@ private:
     void DestroyFramebuffer();
 
     SpriteAtlas atlas_;
-    Font font_;
+    TextRenderer text_renderer_;
     UIRenderer ui_;
     Pulse food_pulse_;
 

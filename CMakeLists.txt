@@ -29,6 +29,7 @@ add_executable(snake
     src/lua/Bindings.cpp
     src/render/Animation.cpp
     src/render/Font.cpp
+    src/render/TextRenderer.cpp
     src/render/SpriteAtlas.cpp
     src/render/UIRenderer.cpp
     src/render/Renderer.cpp

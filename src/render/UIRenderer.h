@@ -10,7 +10,7 @@
 #include "game/StateMachine.h"
 #include "io/Config.h"
 #include "io/Highscores.h"
-#include "render/Font.h"
+#include "render/TextRenderer.h"
 
 namespace snake::render {
 
@@ -45,7 +45,7 @@ struct UiFrameData {
 
 class UIRenderer {
 public:
-    void SetFont(const Font* font);
+    void SetTextRenderer(TextRenderer* text_renderer);
     void Render(SDL_Renderer* r,
                 const Layout& l,
                 const snake::game::Game& game,
@@ -53,7 +53,7 @@ public:
                 const UiFrameData& ui);
 
 private:
-    const Font* font_ = nullptr;
+    TextRenderer* text_renderer_ = nullptr;
     int DrawTextLine(SDL_Renderer* r, int x, int y, std::string_view s);
     void RenderMenu(SDL_Renderer* r, const Layout& l, const UiFrameData& ui);
     void RenderOptions(SDL_Renderer* r, const Layout& l, const UiFrameData& ui);
