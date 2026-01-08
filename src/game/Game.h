@@ -49,6 +49,8 @@ public:
     const ScoreSystem& GetScore() const;
     const Effects& GetEffects() const;
     const TickEvents& Events() const;
+    int FoodScore() const;
+    int BonusScore() const;
 
     void SetBoardSize(int w, int h);
     void SetWrapMode(bool wrap);

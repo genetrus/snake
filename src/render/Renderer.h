@@ -4,10 +4,12 @@
 
 #include <filesystem>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "game/Game.h"
 #include "render/Animation.h"
+#include "render/Effects.h"
 #include "render/TextRenderer.h"
 #include "render/UIRenderer.h"
 
@@ -22,6 +24,9 @@ class Renderer {
 public:
     bool Init(SDL_Renderer* r);
     void Shutdown();
+    void ResetEffects();
+    void SpawnFoodEat(snake::game::Pos pos, int score_delta);
+    void SpawnBonusPickup(snake::game::Pos pos, std::string_view bonus_type, int score_delta);
 
     void RenderFrame(SDL_Renderer* r,
                      int window_w,
@@ -63,10 +68,12 @@ private:
     TextRenderer text_renderer_;
     UIRenderer ui_;
     Pulse food_pulse_;
+    Effects effects_;
 
     SDL_Texture* framebuffer_ = nullptr;
     int fb_w_ = 0;
     int fb_h_ = 0;
+    double last_render_seconds_ = 0.0;
 };
 
 }  // namespace snake::render

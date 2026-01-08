@@ -198,16 +198,16 @@ Lua задаёт/обрабатывает:
 - Любое изменение в Options **немедленно** сохраняется: `%AppData%/snake/config.lua` записывается после каждого изменения
 - Применение:
   - поле (board size) — **после рестарта раунда**
-  - tile size — **сразу**
-  - размер окна — **сразу**
-  - fullscreen — **сразу**
-  - VSync — **опция**, применяется через реализацию (допускается пересоздание renderer)
-    - переключение VSync реализовано через пересоздание `SDL_Renderer` с перезагрузкой текстур/шрифтов
 
 ## Applying settings
 - Apply on restart: `grid.board_w`, `grid.board_h`, `grid.wrap_mode`.
 - Apply immediately: `grid.tile_size`, `window.width`, `window.height`, `window.fullscreen_desktop`, `window.vsync`.
 - Note: `window.vsync` is applied by recreating `SDL_Renderer`; on failure the value is reverted.
+
+## 15.1 Визуальные микрофидбэк-эффекты (render-only)
+- Эффекты живут в модуле рендера и обновляются **по времени кадра** (миллисекунды), а не по tick’ам.
+- Триггеры находятся рядом с игровыми событиями (`food_eaten`, `bonus_picked`) в основном цикле приложения.
+- Эффекты не влияют на правила, счёт или скорость: это чисто визуальные оверлеи (еда с shrink/fade, вспышка головы, пульс экрана, float-текст).
 
 ## 16. Highscores
 - Top: **10** записей

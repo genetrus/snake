@@ -33,7 +33,7 @@ public:
                  std::string_view text,
                  SDL_Color color,
                  int pixel_size,
-                 bool force_bitmap = false);
+                 bool force_bitmap = false) const;
 
 private:
     Metrics MeasureBitmap(std::string_view text, int pixel_size) const;

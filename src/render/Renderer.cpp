@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cstdio>
 #include <cmath>
 #include <filesystem>
 #include <string>
@@ -230,6 +231,7 @@ bool Renderer::Init(SDL_Renderer* r) {
 
     text_renderer_.Init(font_paths, 16);
     ui_.SetTextRenderer(&text_renderer_);
+    effects_.Init();
     return ok;
 }
 
@@ -237,8 +239,43 @@ void Renderer::Shutdown() {
     DestroyFramebuffer();
     text_renderer_.Reset();
     ResetSprites();
+    effects_.Reset();
+    last_render_seconds_ = 0.0;
     sprite_error_text_.clear();
     ui_.SetTextRenderer(nullptr);
+}
+
+void Renderer::ResetEffects() {
+    effects_.Reset();
+}
+
+void Renderer::SpawnFoodEat(snake::game::Pos pos, int score_delta) {
+    effects_.SpawnFoodEat(pos);
+
+    char text[16];
+    std::snprintf(text, sizeof(text), "+%d", score_delta);
+    effects_.SpawnFloatingText(pos, text, SDL_Color{240, 220, 140, 255});
+    effects_.StartHeadFlash(0.12);
+}
+
+void Renderer::SpawnBonusPickup(snake::game::Pos pos, std::string_view bonus_type, int score_delta) {
+    SDL_Color pulse_color{120, 170, 255, 42};
+    SDL_Color text_color{180, 220, 255, 255};
+
+    if (bonus_type == "bonus_score") {
+        pulse_color = SDL_Color{255, 220, 140, 42};
+        text_color = SDL_Color{255, 230, 150, 255};
+    }
+
+    effects_.SpawnBonusPulse(pulse_color);
+
+    if (score_delta > 0) {
+        char text[16];
+        std::snprintf(text, sizeof(text), "+%d", score_delta);
+        effects_.SpawnFloatingText(pos, text, text_color);
+    } else if (bonus_type == "bonus_slow") {
+        effects_.SpawnFloatingText(pos, "SLOW", text_color);
+    }
 }
 
 void Renderer::RenderFrame(SDL_Renderer* r,
@@ -255,6 +292,13 @@ void Renderer::RenderFrame(SDL_Renderer* r,
     if (r == nullptr) {
         return;
     }
+
+    double dt_seconds = 0.0;
+    if (last_render_seconds_ > 0.0) {
+        dt_seconds = now_seconds - last_render_seconds_;
+    }
+    last_render_seconds_ = now_seconds;
+    effects_.Update(dt_seconds);
 
     std::string combined_error_text = overlay_error_text;
     if (!sprite_error_text_.empty()) {
@@ -363,8 +407,11 @@ void Renderer::RenderFrame(SDL_Renderer* r,
         }
     }
 
+    effects_.RenderFoodEats(r, sprites_.food.texture, origin, tile_px);
+
     const auto& snake = game.GetSnake();
     const auto& body = snake.Body();
+    const double head_flash = effects_.HeadFlashStrength();
     for (std::size_t i = 0; i < body.size(); ++i) {
         const bool is_head = i == 0;
         SDL_Rect dst = TileRect(origin, tile_px, body[i]);
@@ -375,7 +422,17 @@ void Renderer::RenderFrame(SDL_Renderer* r,
             const SDL_Color color = is_head ? SDL_Color{240, 240, 120, 255} : SDL_Color{120, 200, 120, 255};
             RenderFallbackRect(r, dst, color);
         }
+        if (is_head && head_flash > 0.0) {
+            SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_ADD);
+            SDL_SetRenderDrawColor(r, 255, 255, 255, static_cast<Uint8>(std::round(60.0 * head_flash)));
+            SDL_RenderFillRect(r, &dst);
+            SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
+        }
     }
+
+    effects_.RenderFloatingText(r, text_renderer_, origin, tile_px);
+    SDL_Rect viewport_rect{0, 0, virtual_w, virtual_h};
+    effects_.RenderPulse(r, viewport_rect);
 
     Layout layout{};
     layout.window_w = virtual_w;

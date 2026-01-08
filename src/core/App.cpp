@@ -420,6 +420,7 @@ void App::HandleMenus(bool& running) {
         ApplyRoundSettingsOnRestart();
         ApplyConfig();
         game_.ResetAll();
+        renderer_impl_.ResetEffects();
         sm_.StartGame();
         lua_.CallWithCtxIfExists("on_round_start", &lua_ctx_);
     };
@@ -505,6 +506,7 @@ void App::HandleMenus(bool& running) {
                 sfx_.Play(snake::audio::SfxId::MenuClick, "menu_to_main");
                 sm_.BackToMenu();
                 game_.ResetAll();
+                renderer_impl_.ResetEffects();
             }
             break;
         }
@@ -522,6 +524,7 @@ void App::HandleMenus(bool& running) {
                 sfx_.Play(snake::audio::SfxId::MenuClick, "menu_to_main");
                 sm_.BackToMenu();
                 game_.ResetAll();
+                renderer_impl_.ResetEffects();
             }
             break;
         case snake::game::Screen::GameOver:
@@ -535,6 +538,7 @@ void App::HandleMenus(bool& running) {
                 sfx_.Play(snake::audio::SfxId::MenuClick, "menu_to_main");
                 sm_.BackToMenu();
                 game_.ResetAll();
+                renderer_impl_.ResetEffects();
             }
             break;
         case snake::game::Screen::NameEntry:
@@ -571,11 +575,14 @@ void App::HandleMenus(bool& running) {
             const auto events = game_.Events();
 
             if (events.food_eaten) {
+                renderer_impl_.SpawnFoodEat(game_.GetSnake().Head(), game_.FoodScore());
                 lua_.CallWithCtxIfExists("on_food_eaten", &lua_ctx_);
                 SDL_Log("Audio event: food_eaten");
                 sfx_.Play(snake::audio::SfxId::Eat, "food_eaten");
             }
             if (events.bonus_picked) {
+                const int bonus_delta = events.bonus_type == "bonus_score" ? game_.BonusScore() : 0;
+                renderer_impl_.SpawnBonusPickup(game_.GetSnake().Head(), events.bonus_type, bonus_delta);
                 lua_.CallWithCtxIfExists("on_bonus_picked", &lua_ctx_, events.bonus_type);
                 SDL_Log("Audio event: bonus_picked (%s)", events.bonus_type.c_str());
                 sfx_.Play(snake::audio::SfxId::Eat, "bonus_picked");

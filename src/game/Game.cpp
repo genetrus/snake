@@ -157,6 +157,14 @@ const Game::TickEvents& Game::Events() const {
     return tick_events_;
 }
 
+int Game::FoodScore() const {
+    return food_score_;
+}
+
+int Game::BonusScore() const {
+    return bonus_score_;
+}
+
 void Game::SetBoardSize(int w, int h) {
     board_.SetSize(w, h);
 }
