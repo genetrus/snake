@@ -7,6 +7,7 @@ void Input::BeginFrame() {
     keys_released_.fill(false);
     mouse_buttons_pressed_.fill(false);
     mouse_buttons_released_.fill(false);
+    key_presses_.clear();
     mouse_dx_ = 0;
     mouse_dy_ = 0;
     mouse_wheel_y_ = 0;
@@ -23,6 +24,7 @@ void Input::HandleEvent(const SDL_Event& e) {
                 keys_down_[scancode] = true;
                 if (e.key.repeat == 0) {
                     keys_pressed_[scancode] = true;
+                    key_presses_.push_back(e.key.keysym.sym);
                 }
             }
             break;
@@ -98,6 +100,10 @@ bool Input::KeyPressed(SDL_Keycode key) const {
 
 bool Input::KeyReleased(SDL_Keycode key) const {
     return WasReleased(SDL_GetScancodeFromKey(key));
+}
+
+const std::vector<SDL_Keycode>& Input::KeyPresses() const {
+    return key_presses_;
 }
 
 int Input::MouseX() const {

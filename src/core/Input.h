@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstdint>
+#include <vector>
 
 namespace snake::core {
 class Input {
@@ -22,6 +23,7 @@ public:
     bool KeyDown(SDL_Keycode key) const;
     bool KeyPressed(SDL_Keycode key) const;
     bool KeyReleased(SDL_Keycode key) const;
+    const std::vector<SDL_Keycode>& KeyPresses() const;
 
     int MouseX() const;
     int MouseY() const;
@@ -43,6 +45,7 @@ private:
     std::array<bool, SDL_NUM_SCANCODES> keys_down_{};
     std::array<bool, SDL_NUM_SCANCODES> keys_pressed_{};
     std::array<bool, SDL_NUM_SCANCODES> keys_released_{};
+    std::vector<SDL_Keycode> key_presses_;
 
     int mouse_x_ = 0;
     int mouse_y_ = 0;
