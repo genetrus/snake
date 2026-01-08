@@ -3,6 +3,7 @@
 #include <SDL.h>
 
 #include <string>
+#include <vector>
 
 #include "game/Game.h"
 #include "render/Animation.h"
@@ -30,6 +31,8 @@ public:
                      double now_seconds,
                      const std::string& overlay_error_text,
                      bool show_text_debug,
+                     bool show_audio_debug,
+                     const std::vector<std::string>& audio_debug_lines,
                      const snake::render::UiFrameData& ui_frame);
 
 private:

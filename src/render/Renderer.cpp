@@ -161,6 +161,8 @@ void Renderer::RenderFrame(SDL_Renderer* r,
                            double now_seconds,
                            const std::string& overlay_error_text,
                            bool show_text_debug,
+                           bool show_audio_debug,
+                           const std::vector<std::string>& audio_debug_lines,
                            const snake::render::UiFrameData& ui_frame) {
     if (r == nullptr) {
         return;
@@ -369,6 +371,36 @@ void Renderer::RenderFrame(SDL_Renderer* r,
 
         int cursor_y = bg.y + padding;
         for (const auto& line : lines) {
+            text_renderer_.DrawText(r, bg.x + padding, cursor_y, line, text_color, 14, true);
+            cursor_y += line_h + line_gap;
+        }
+
+        SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
+    }
+
+    if (show_audio_debug && !audio_debug_lines.empty()) {
+        const int padding = 8;
+        const int line_gap = 4;
+        const SDL_Color text_color{220, 220, 220, 255};
+        const SDL_Color bg_color{12, 12, 18, 220};
+
+        int max_w = 0;
+        int line_h = 0;
+        for (const auto& line : audio_debug_lines) {
+            const auto metrics = text_renderer_.MeasureText(line, 14, true);
+            max_w = std::max(max_w, metrics.w);
+            line_h = std::max(line_h, metrics.h);
+        }
+
+        const int total_h = static_cast<int>(audio_debug_lines.size()) * line_h +
+                            (static_cast<int>(audio_debug_lines.size()) - 1) * line_gap;
+        SDL_Rect bg{padding, padding * 2 + 120, max_w + padding * 2, total_h + padding * 2};
+        SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(r, bg_color.r, bg_color.g, bg_color.b, bg_color.a);
+        SDL_RenderFillRect(r, &bg);
+
+        int cursor_y = bg.y + padding;
+        for (const auto& line : audio_debug_lines) {
             text_renderer_.DrawText(r, bg.x + padding, cursor_y, line, text_color, 14, true);
             cursor_y += line_h + line_gap;
         }
