@@ -9,10 +9,10 @@ local rules = {
 
 -- Simple monotonic speed curve with a reasonable cap.
 function rules.speed_ticks_per_sec(score)
-  local base = 8
-  local growth = math.floor((score or 0) / 25)
+  local base = 8 / 3
+  local growth = math.floor((score or 0) / 25) / 3
   local ticks = base + growth
-  return math.min(ticks, 30)
+  return math.min(ticks, 10)
 end
 
 -- Hooks (no-op by default).

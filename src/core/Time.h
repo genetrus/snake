@@ -7,6 +7,7 @@ class Time {
 public:
     void Init();
     void UpdateFrame();
+    void UpdateFrameNoAccum();
 
     double FrameDt() const;
     double Now() const;
