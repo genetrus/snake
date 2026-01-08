@@ -197,7 +197,7 @@ int TextRenderer::DrawText(SDL_Renderer* r,
                            std::string_view text,
                            SDL_Color color,
                            int pixel_size,
-                           bool force_bitmap) {
+                           bool force_bitmap) const {
     if (r == nullptr) {
         return 0;
     }
