@@ -2,13 +2,13 @@
 
 #include <SDL.h>
 
+#include <filesystem>
 #include <string>
 #include <vector>
 
 #include "game/Game.h"
 #include "render/Animation.h"
 #include "render/TextRenderer.h"
-#include "render/SpriteAtlas.h"
 #include "render/UIRenderer.h"
 
 namespace snake::render {
@@ -36,10 +36,30 @@ public:
                      const snake::render::UiFrameData& ui_frame);
 
 private:
+    struct SpriteTexture {
+        SDL_Texture* texture = nullptr;
+        int w = 0;
+        int h = 0;
+    };
+
+    struct SpriteSet {
+        SpriteTexture snake_head;
+        SpriteTexture snake_body;
+        SpriteTexture food;
+        SpriteTexture bonus_score;
+        SpriteTexture bonus_slow;
+    };
+
     bool EnsureFramebuffer(SDL_Renderer* r, int virtual_w, int virtual_h);
     void DestroyFramebuffer();
+    bool LoadSprite(SDL_Renderer* r,
+                    const std::filesystem::path& path,
+                    SpriteTexture& sprite,
+                    std::string_view label);
+    void ResetSprites();
 
-    SpriteAtlas atlas_;
+    SpriteSet sprites_{};
+    std::string sprite_error_text_;
     TextRenderer text_renderer_;
     UIRenderer ui_;
     Pulse food_pulse_;

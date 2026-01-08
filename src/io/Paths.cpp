@@ -1,5 +1,7 @@
 #include "io/Paths.h"
 
+#include <SDL.h>
+
 #include <filesystem>
 #include <string>
 
@@ -8,7 +10,31 @@
 namespace snake::io {
 
 std::filesystem::path AssetsDir() {
-    return std::filesystem::path("assets");
+    static std::filesystem::path resolved = []() {
+        const std::filesystem::path cwd_assets = std::filesystem::current_path() / "assets";
+        if (std::filesystem::exists(cwd_assets)) {
+            return cwd_assets;
+        }
+
+        std::filesystem::path base_assets;
+        if (char* base = SDL_GetBasePath()) {
+            std::filesystem::path base_path(base);
+            SDL_free(base);
+            base_assets = base_path / "assets";
+            if (std::filesystem::exists(base_assets)) {
+                return base_assets;
+            }
+
+            const std::filesystem::path parent_assets = base_path.parent_path() / "assets";
+            if (std::filesystem::exists(parent_assets)) {
+                return parent_assets;
+            }
+        }
+
+        return std::filesystem::path("assets");
+    }();
+
+    return resolved;
 }
 
 std::filesystem::path AssetsPath(std::string_view relative) {
