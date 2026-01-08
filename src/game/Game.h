@@ -7,6 +7,7 @@
 #include "game/Snake.h"
 #include "game/Spawner.h"
 
+#include <deque>
 #include <random>
 #include <string>
 #include <string_view>
@@ -60,6 +61,8 @@ public:
     void SetControls(const Controls& c);
 
 private:
+    static constexpr std::size_t kTurnQueueCapacity = 2;
+
     Board board_;
     Snake snake_;
     Spawner spawner_;
@@ -77,8 +80,11 @@ private:
 
     std::string last_game_over_reason_ = "unknown";
     bool game_over_ = false;
+    std::deque<Dir> turn_queue_;
 
     Pos NextHeadPos() const;
     void SetGameOver(std::string reason);
+    void EnqueueTurn(Dir d);
+    void ApplyTurnQueue();
 };
 }  // namespace snake::game

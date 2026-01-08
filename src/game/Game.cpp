@@ -7,10 +7,25 @@
 #include <utility>
 
 namespace snake::game {
+namespace {
+
+bool IsOpposite(Dir a, Dir b) {
+    return (a == Dir::Up && b == Dir::Down) ||
+        (a == Dir::Down && b == Dir::Up) ||
+        (a == Dir::Left && b == Dir::Right) ||
+        (a == Dir::Right && b == Dir::Left);
+}
+
+bool IsSame(Dir a, Dir b) {
+    return a == b;
+}
+
+}  // namespace
 
 void Game::ResetAll() {
     last_game_over_reason_ = "unknown";
     game_over_ = false;
+    turn_queue_.clear();
     std::random_device rd;
     rng_.seed(rd());
     snake_.Reset(board_);
@@ -66,6 +81,7 @@ void Game::Tick(double tick_dt) {
     effects_.Update(tick_dt);
 
     spawner_.EnsureFood(board_, snake_, rng_);
+    ApplyTurnQueue();
 
     Pos next = NextHeadPos();
     if (wrap_mode_) {
@@ -111,17 +127,19 @@ void Game::HandleInput(const snake::core::Input& input) {
     if (game_over_) {
         return;
     }
-    auto pressed = [&](const ActionKeys& keys) {
-        return input.KeyPressed(keys.primary) || input.KeyPressed(keys.secondary);
+    auto match = [](const ActionKeys& keys, SDL_Keycode key) {
+        return key == keys.primary || key == keys.secondary;
     };
-    if (pressed(controls_.up)) {
-        snake_.SetDirection(Dir::Up);
-    } else if (pressed(controls_.down)) {
-        snake_.SetDirection(Dir::Down);
-    } else if (pressed(controls_.left)) {
-        snake_.SetDirection(Dir::Left);
-    } else if (pressed(controls_.right)) {
-        snake_.SetDirection(Dir::Right);
+    for (SDL_Keycode key : input.KeyPresses()) {
+        if (match(controls_.up, key)) {
+            EnqueueTurn(Dir::Up);
+        } else if (match(controls_.down, key)) {
+            EnqueueTurn(Dir::Down);
+        } else if (match(controls_.left, key)) {
+            EnqueueTurn(Dir::Left);
+        } else if (match(controls_.right, key)) {
+            EnqueueTurn(Dir::Right);
+        }
     }
 }
 
@@ -214,6 +232,34 @@ Pos Game::NextHeadPos() const {
 void Game::SetGameOver(std::string reason) {
     last_game_over_reason_ = std::move(reason);
     game_over_ = true;
+}
+
+void Game::EnqueueTurn(Dir d) {
+    if (turn_queue_.size() >= kTurnQueueCapacity) {
+        return;
+    }
+    const Dir reference = turn_queue_.empty() ? snake_.Direction() : turn_queue_.back();
+    if (IsSame(reference, d) || IsOpposite(reference, d)) {
+        return;
+    }
+    // Enqueue only if it isn't a duplicate or a 180-degree reversal.
+    turn_queue_.push_back(d);
+}
+
+void Game::ApplyTurnQueue() {
+    const Dir current = snake_.Direction();
+    bool did_apply = false;
+
+    // Apply at most one queued turn per tick; discard invalid reversals.
+    while (!turn_queue_.empty() && !did_apply) {
+        const Dir next = turn_queue_.front();
+        turn_queue_.pop_front();
+        if (IsOpposite(current, next) || IsSame(current, next)) {
+            continue;
+        }
+        snake_.SetDirection(next);
+        did_apply = true;
+    }
 }
 
 }  // namespace snake::game
