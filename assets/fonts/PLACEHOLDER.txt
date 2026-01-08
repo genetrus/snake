@@ -1,1 +1,1 @@
-Placeholder font assets will be added here.
+Place an OFL font .ttf here (e.g. Inter-Regular.ttf).
