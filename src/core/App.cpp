@@ -101,6 +101,10 @@ int App::Run() {
                 running = false;
             }
 
+            if (input_.KeyPressed(SDLK_F9)) {
+                debug_text_overlay_ = !debug_text_overlay_;
+            }
+
             HandleMenus(running);
 
             RenderFrame();
@@ -143,8 +147,11 @@ void App::InitSDL() {
     if ((IMG_Init(IMG_INIT_PNG) & IMG_INIT_PNG) == 0) {
         SDL_Log("IMG_Init failed: %s", IMG_GetError());
     }
-    if (TTF_Init() != 0) {
+    const int ttf_result = TTF_Init();
+    if (ttf_result != 0) {
         SDL_Log("TTF_Init failed: %s", TTF_GetError());
+    } else {
+        SDL_Log("TTF_Init succeeded");
     }
 }
 
@@ -282,7 +289,7 @@ void App::RenderFrame() {
         {"Back", ""},
     };
 
-    renderer_impl_.RenderFrame(renderer_, window_w, window_h, rs, game_, time_.Now(), overlay_error_text, ui);
+    renderer_impl_.RenderFrame(renderer_, window_w, window_h, rs, game_, time_.Now(), overlay_error_text, debug_text_overlay_, ui);
 }
 
 bool App::RecreateRenderer(bool want_vsync) {

@@ -4,10 +4,12 @@
 #include <SDL_image.h>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cmath>
 #include <filesystem>
 #include <string>
+#include <vector>
 
 #if SDL_VERSION_ATLEAST(2, 0, 12)
 #define SNAKE_HAS_SDL_SCALE_MODE 1
@@ -127,20 +129,28 @@ bool Renderer::Init(SDL_Renderer* r) {
         ok = atlas_.Load(r, atlas_path) && ok;
     }
 
-    const auto font_path = snake::io::AssetsPath("fonts/Roboto-Regular.ttf");
-    if (std::filesystem::exists(font_path)) {
-        ok = font_.Load(font_path, 16) && ok;
-    }
+    std::vector<std::filesystem::path> font_paths;
+    font_paths.push_back(snake::io::AssetsPath("fonts/Roboto-Regular.ttf"));
+#if defined(_WIN32)
+    font_paths.emplace_back("C:/Windows/Fonts/segoeui.ttf");
+    font_paths.emplace_back("C:/Windows/Fonts/arial.ttf");
+#elif defined(__APPLE__)
+    font_paths.emplace_back("/Library/Fonts/Arial.ttf");
+#else
+    font_paths.emplace_back("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf");
+    font_paths.emplace_back("/usr/share/fonts/truetype/freefont/FreeSans.ttf");
+#endif
 
-    ui_.SetFont(&font_);
+    text_renderer_.Init(font_paths, 16);
+    ui_.SetTextRenderer(&text_renderer_);
     return ok;
 }
 
 void Renderer::Shutdown() {
     DestroyFramebuffer();
-    font_.Reset();
+    text_renderer_.Reset();
     atlas_.SetTexture(nullptr);
-    ui_.SetFont(nullptr);
+    ui_.SetTextRenderer(nullptr);
 }
 
 void Renderer::RenderFrame(SDL_Renderer* r,
@@ -150,6 +160,7 @@ void Renderer::RenderFrame(SDL_Renderer* r,
                            const snake::game::Game& game,
                            double now_seconds,
                            const std::string& overlay_error_text,
+                           bool show_text_debug,
                            const snake::render::UiFrameData& ui_frame) {
     if (r == nullptr) {
         return;
@@ -309,15 +320,9 @@ void Renderer::RenderFrame(SDL_Renderer* r,
     if (!overlay_error_text.empty()) {
         const int padding = 8;
         SDL_Color text_color{255, 200, 200, 255};
-        int text_w = 0;
-        int text_h = 0;
-        SDL_Texture* tex = nullptr;
-        if (font_.IsLoaded()) {
-            tex = font_.RenderText(r, overlay_error_text, text_color, &text_w, &text_h);
-        } else {
-            text_w = static_cast<int>(overlay_error_text.size()) * 7;
-            text_h = 16;
-        }
+        const auto metrics = text_renderer_.MeasureText(overlay_error_text, 16);
+        int text_w = metrics.w;
+        int text_h = metrics.h;
 
         const int bg_w = text_w + padding * 2;
         const int bg_h = text_h + padding * 2;
@@ -327,14 +332,45 @@ void Renderer::RenderFrame(SDL_Renderer* r,
         SDL_SetRenderDrawColor(r, 10, 10, 10, 190);
         SDL_RenderFillRect(r, &bg);
 
-        if (tex != nullptr) {
-            SDL_Rect dst{bg.x + padding, bg.y + padding, text_w, text_h};
-            SDL_RenderCopy(r, tex, nullptr, &dst);
-            SDL_DestroyTexture(tex);
-        } else {
-            SDL_Rect dst{bg.x + padding, bg.y + padding, text_w, text_h};
-            SDL_SetRenderDrawColor(r, text_color.r, text_color.g, text_color.b, text_color.a);
-            SDL_RenderDrawRect(r, &dst);
+        text_renderer_.DrawText(r, bg.x + padding, bg.y + padding, overlay_error_text, text_color, 16);
+
+        SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
+    }
+
+    if (show_text_debug) {
+        const int padding = 8;
+        const int line_gap = 4;
+        const SDL_Color text_color{220, 220, 220, 255};
+        const SDL_Color bg_color{12, 12, 18, 220};
+
+        const std::string ttf_status = text_renderer_.IsTtfReady() ? "TTF: OK" : "TTF: FAIL";
+        const std::string font_path =
+            text_renderer_.FontPath().empty() ? "n/a" : text_renderer_.FontPath().string();
+        const std::string font_status = text_renderer_.IsFontLoaded()
+                                            ? "Font: OK (" + font_path + ")"
+                                            : "Font: FAIL (" + font_path + ")";
+        const std::string last_error =
+            text_renderer_.LastError().empty() ? "Last error: None" : "Last error: " + text_renderer_.LastError();
+
+        const std::array<std::string, 3> lines = {ttf_status, font_status, last_error};
+        int max_w = 0;
+        int line_h = 0;
+        for (const auto& line : lines) {
+            const auto metrics = text_renderer_.MeasureText(line, 14, true);
+            max_w = std::max(max_w, metrics.w);
+            line_h = std::max(line_h, metrics.h);
+        }
+
+        const int total_h = static_cast<int>(lines.size()) * line_h + (static_cast<int>(lines.size()) - 1) * line_gap;
+        SDL_Rect bg{padding, padding, max_w + padding * 2, total_h + padding * 2};
+        SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(r, bg_color.r, bg_color.g, bg_color.b, bg_color.a);
+        SDL_RenderFillRect(r, &bg);
+
+        int cursor_y = bg.y + padding;
+        for (const auto& line : lines) {
+            text_renderer_.DrawText(r, bg.x + padding, cursor_y, line, text_color, 14, true);
+            cursor_y += line_h + line_gap;
         }
 
         SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);

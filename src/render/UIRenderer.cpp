@@ -9,12 +9,12 @@
 #include "game/Game.h"
 #include "game/ScoreSystem.h"
 #include "game/StateMachine.h"
-#include "render/Font.h"
+#include "render/TextRenderer.h"
 
 namespace snake::render {
 
-void UIRenderer::SetFont(const Font* font) {
-    font_ = font;
+void UIRenderer::SetTextRenderer(TextRenderer* text_renderer) {
+    text_renderer_ = text_renderer;
 }
 
 void UIRenderer::Render(SDL_Renderer* r,
@@ -102,23 +102,14 @@ int UIRenderer::DrawTextLine(SDL_Renderer* r, int x, int y, std::string_view s) 
     const SDL_Color color{230, 230, 230, 255};
     int w = 0;
     int h = 0;
-    SDL_Texture* tex = nullptr;
-
-    if (font_ != nullptr && font_->IsLoaded()) {
-        tex = font_->RenderText(r, s, color, &w, &h);
+    if (text_renderer_ != nullptr) {
+        return text_renderer_->DrawText(r, x, y, s, color, 16);
     }
 
-    if (tex != nullptr) {
-        SDL_Rect dst{x, y, w, h};
-        SDL_RenderCopy(r, tex, nullptr, &dst);
-        SDL_DestroyTexture(tex);
-        return dst.h;
-    } else {
-        SDL_Rect rect{x, y, static_cast<int>(s.size()) * 7, 16};
-        SDL_SetRenderDrawColor(r, 180, 180, 180, 255);
-        SDL_RenderDrawRect(r, &rect);
-        return rect.h;
-    }
+    SDL_Rect rect{x, y, static_cast<int>(s.size()) * 7, 16};
+    SDL_SetRenderDrawColor(r, 180, 180, 180, 255);
+    SDL_RenderDrawRect(r, &rect);
+    return rect.h;
 }
 
 void UIRenderer::RenderMenu(SDL_Renderer* r, const Layout& l, const UiFrameData& ui) {

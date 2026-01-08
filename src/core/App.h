@@ -102,6 +102,7 @@ private:
     int pending_highscore_score_ = 0;
     bool has_pending_highscore_ = false;
     bool name_entry_active_ = false;
+    bool debug_text_overlay_ = false;
 
     snake::render::Renderer renderer_impl_;
     AppLuaContext lua_ctx_{};
