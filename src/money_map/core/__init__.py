@@ -228,12 +228,12 @@ def _legal_gate_allowed(max_gate: str, gate: str) -> bool:
 
 def _sort_recommendations(objective: str, recommendations: List[Recommendation]) -> List[Recommendation]:
     if objective == "fastest_money":
-        return sorted(recommendations, key=lambda rec: rec.feasibility.prep_weeks)
+        return sorted(recommendations, key=lambda rec: (rec.feasibility.prep_weeks, rec.variant_id))
     if objective == "lowest_risk":
-        return sorted(recommendations, key=lambda rec: rec.legal.gate)
+        return sorted(recommendations, key=lambda rec: (rec.legal.gate, rec.variant_id))
     if objective == "max_income":
-        return sorted(recommendations, key=lambda rec: _net_value(rec), reverse=True)
-    return recommendations
+        return sorted(recommendations, key=lambda rec: (-_net_value(rec), rec.variant_id))
+    return sorted(recommendations, key=lambda rec: rec.variant_id)
 
 
 def _net_value(recommendation: Recommendation) -> int:

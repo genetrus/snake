@@ -1,0 +1,13 @@
+hours_per_week: 15
+capital_eur: 300
+language_cefr: B2
+assets:
+  - laptop
+  - smartphone
+objective_preset: fastest_money
+startability_window_weeks: 2
+include_tags:
+  - fast
+  - offline
+exclude_tags: []
+max_legal_friction: registration

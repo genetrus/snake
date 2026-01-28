@@ -1,0 +1,11 @@
+hours_per_week: 10
+capital_eur: 200
+language_cefr: B1
+assets:
+  - laptop
+objective_preset: lowest_risk
+startability_window_weeks: 4
+include_tags:
+  - low_risk
+exclude_tags: []
+max_legal_friction: require_check

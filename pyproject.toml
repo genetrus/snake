@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "money-map"
+version = "0.1.0"
+description = "Money Map offline MVP"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+ui = ["streamlit>=1.31"]
+test = ["pytest>=7.0"]
+dev = ["pytest>=7.0", "streamlit>=1.31"]
+
+[project.scripts]
+money-map = "money_map.app.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
