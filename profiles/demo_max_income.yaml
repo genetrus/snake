@@ -1,0 +1,10 @@
+hours_per_week: 20
+capital_eur: 500
+language_cefr: C1
+assets:
+  - laptop
+objective_preset: max_income
+startability_window_weeks: 4
+include_tags: []
+exclude_tags: []
+max_legal_friction: registration
