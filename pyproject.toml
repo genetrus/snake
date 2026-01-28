@@ -12,6 +12,8 @@ dependencies = []
 
 [project.optional-dependencies]
 ui = ["streamlit>=1.31"]
+test = ["pytest>=7.0"]
+dev = ["pytest>=7.0", "streamlit>=1.31"]
 
 [project.scripts]
 money-map = "money_map.app.cli:main"
